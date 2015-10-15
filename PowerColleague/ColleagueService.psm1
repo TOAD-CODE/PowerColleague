@@ -60,6 +60,7 @@ function Initialize-ColleagueService{
     $SDKVersion = [System.Configuration.ConfigurationManager]::AppSettings["sdkVersion"]
     
     $EllucianPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianDependenciesPath"]
+    $script:VSExtPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianVSExtDependenciesPath"]
 	    
     $script:ColleagueUserName = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserName"]
     $script:ColleagueUserPassword = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserPassword"]
@@ -697,8 +698,8 @@ function New-FileDetails {
   Write-Verbose "Add Assembly System.Web, System.XML, Ellucian.WebServices.VS.DataModels and Ellucian.WebServices.VS.Ext"
   Add-Type -AssemblyName System.Web
   Add-Type -AssemblyName System.Xml
-  Add-Type -Path .\Ellucian.WebServices.VS.DataModels.dll
-  Add-Type -Path .\Ellucian.WebServices.VS.Ext.dll
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
   
   Write-Verbose "Get the Colleague Settings from the AppConfig"
   $colleagueParams = [System.Web.Configuration.WebConfigurationManager]::GetSection("ColleagueSettings/DmiParameters") -as [Ellucian.WebServices.Core.Config.DmiParameterCustomSection]
