@@ -1,4 +1,4 @@
-#region SessionInfo
+#region ModuleSettings
 function Set-AppConfig{
 	param(
 		[Parameter(Mandatory=$true, Position=1)]
@@ -8,6 +8,44 @@ function Set-AppConfig{
 	
 	Add-Type -AssemblyName System.Configuration
     [System.AppDomain]::CurrentDomain.SetData("APP_CONFIG_FILE", $AppConfigPath)
+}
+
+function Set-ColleagueCreds {
+    param(
+        [string]
+        $username,
+        [string]
+        $password
+    )
+    
+    AddUpdateAppSettings "colleagueUserName" $username
+    AddUpdateAppSettings "colleagueUserPassword" $password
+}
+
+function Set-AppSettings {
+  param(
+    [string]
+    $key,
+    [string]
+    $value
+  )
+  try
+  {
+    $configFile = [System.Configuration.ConfigurationManager]::OpenExeConfiguration([System.Configuration.ConfigurationUserLevel]::None)
+    $settings = $configFile.AppSettings.Settings
+    if($settings[$key]){
+    $settings[$key].Value = $value
+    }
+    else {
+    $settings.Add($key, $value)
+    }
+
+    $configFile.Save([System.Configuration.ConfigurationSaveMode]::Modified)
+    [System.Configuration.ConfigurationManager]::RefreshSection($configFile.AppSettings.SectionInformation.Name)
+  }
+  catch{
+    $_
+  }
 }
 
 function Initialize-ColleagueService{
@@ -20,8 +58,9 @@ function Initialize-ColleagueService{
     Set-AppConfig $AppConfigPath
     
     $SDKVersion = [System.Configuration.ConfigurationManager]::AppSettings["sdkVersion"]
-    #$EllucianPath = "C:\Program Files (x86)\Ellucian\ColleagueSDKForDotNetV$SDKVersion\Dependencies"
+    
     $EllucianPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianDependenciesPath"]
+    $script:VSExtPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianVSExtDependenciesPath"]
 	    
     $script:ColleagueUserName = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserName"]
     $script:ColleagueUserPassword = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserPassword"]
@@ -38,6 +77,7 @@ function Initialize-ColleagueService{
     [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.Initialize()
     [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.StoreParameter([Ellucian.Colleague.Property.Properties.Resources]::ValidApplicationServerSettingsFlag, $newObj, [DateTime]::MaxValue )
 
+    # These Types are what is expected to be passed when compiling the Entities in powershell
     $script:TypeAssem = (
       'System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
       'System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
@@ -51,9 +91,18 @@ function Initialize-ColleagueService{
       'Ellucian.Dmi.Runtime, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb'
     )
 }
+#endregion ModuleSettings
+
+#region SessionInfo
 
 function Get-SessionTimeout {
     $script:timeoutDate
+}
+
+function Set-SessionTimeout {
+    param ([int] $timeout)
+    
+    $script:timeoutDate = (Get-Date).AddSeconds($timeout - 5)
 }
 
 function Open-DmiSession {        
@@ -68,7 +117,7 @@ function Open-DmiSession {
     if(!$session.SecurityToken){
         throw [System.ArgumentNullException] $session.Errors
     }
-    
+    Set-SessionTimeout $session.TokenTimeout
     $session
 }
 
@@ -92,11 +141,6 @@ function Get-ColleagueSession{
     $script:session
 }
 
-function Set-SessionTimeout {
-    param ([int] $timeout)
-    
-    $script:timeoutDate = (Get-Date).AddSeconds($timeout - 1)
-}
 #endregion SessionInfo
 
 #region ColleagueInfo
@@ -109,7 +153,7 @@ function Get-TransactionInvoker {
   New-Object Ellucian.Data.Colleague.ColleagueTransactionInvoker(Get-ColleagueSession)
 }
 
-function Get-TableKeys{
+function Read-TableKeys{
   param(
     [Parameter(Mandatory=$true, Position=1)]
     [string]
@@ -131,7 +175,7 @@ function Get-AppsForEntity {
   $returnVal
 }
 
-function Get-TableInfo{
+function Read-TableInfo{
   param(
     [Parameter(Mandatory=$true, Position=1)]
     [string]
@@ -151,7 +195,7 @@ function Get-TableInfo{
   
   if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
     $app = Get-AppsForEntity $TableName
-    $testsource = Get-TestDetails $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
+    $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
   }
   $dataReader = Get-DataReader
@@ -352,9 +396,11 @@ namespace ColleagueSDK.DataContracts
 
     Add-Type -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllEntities -Language CSharp
   }
+  
   PROCESS {
-    $rtnObj = New-Object PSObject
+    #$rtnObj = New-Object PSObject
     foreach ($appnme in $ApplicationNames){
+      $rtnObj = New-Object PSObject
       $appname = $appnme.ToUpper()
       Add-Member -InputObject $rtnObj -MemberType NoteProperty -Name Application -Value $appname
       $request = New-Object ColleagueSDK.DataContracts.GetApplEntitiesRequest
@@ -365,13 +411,15 @@ namespace ColleagueSDK.DataContracts
       
       $entities = Invoke-CTX $typeRequest $typeResponse $request
       Add-Member -InputObject $rtnObj -MemberType NoteProperty -Name Entities -Value $entities.TvEntities
+      Write-Output $rtnObj
     }
-    return $rtnObj
+    #return $rtnObj
   }
+  
   END {}
 }
 
-function Get-TestDetails{
+function Get-EntityModel {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1)]
@@ -386,25 +434,29 @@ function Get-TestDetails{
 
 switch ($PSCmdlet.ParameterSetName)
   {
-    "p2" { $fileDetails = CreateFileDetails $App $FileName -DetailMode }
-    default{$fileDetails = CreateFileDetails $App $FileName -FieldNames $FieldNames}
+    "p2" { $fileDetails = New-FileDetails $App $FileName -DetailMode }
+    default{$fileDetails = New-FileDetails $App $FileName -FieldNames $FieldNames}
   }
-  
-  $entityDataModelGenerator = CreateEntityGeneratorInput $fileDetails 
+  Write-Verbose "Create Entity Generator from New-EntityGeneratorInput"
+  $entityDataModelGenerator = New-EntityGeneratorInput $fileDetails 
   
   $entityDataModelGenerator.dataContractNamespace = "ColleagueSDK.DataContracts"
   $entityDataModelGenerator.dateTime = Get-Date
 
-  return CreateTransform $entityDataModelGenerator
+  Write-Verbose "Transform the generator to C# code and return"
+  return New-EntityTransform $entityDataModelGenerator
 }
 #endregion ColleagueInfo
 
 #region VSExtUtilitiesRebuild
-function CreateEntityGeneratorInput{
+function New-EntityGeneratorInput{
+  [CmdletBinding()]
   param(
+    [Parameter(Mandatory=$true)]
     [Ellucian.WebServices.VS.DataModels.ColleagueFileDetails]
     $FileDetails
   )
+  Write-Verbose "Create the Entity Models and add to Powershell"
   $code = @"
 using System;
 using System.Collections.Generic;
@@ -537,7 +589,8 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
   
   $entityDataModelGeneratorXml = New-Object Ellucian.WebServices.VS.Contract.Generator.Entity.EntityDataModelGeneratorXml
   
-  $entityDataModelGeneratorXml.Id = "c6c965be-fde7-4640-8425-e01f4fd89682"
+  Write-Verbose "Set the entity values the same as from the VS ext"
+  $entityDataModelGeneratorXml.Id = "c6c965be-fde7-4640-8425-e01f4fd89682" # no idea what this is, just copied it from the extension
   $entityDataModelGeneratorXml.application = $fileDetails.Application
   $entityDataModelGeneratorXml.dataContractVersion = "1.0"
   $entityDataModelGeneratorXml.environment = $fileDetails.SourceEnvironment
@@ -558,6 +611,7 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
   try{
     foreach($current in $fileDetails.Fields)
     {
+      Write-Verbose "Processing field: $current"
       if($current.RecordKey -eq "GUID Information"){
         $legacyFileTag.implementedInterface= "IColleagueGuidEntity"
       }
@@ -592,7 +646,9 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
         $entityContentsTag.entityDataElement.Add($entityDataElementTag);
       }
     }
+    
     foreach($current2 in  $fileDetails.Associations.Values){
+      Write-Verbose "Proccessing association: $current2"
       if ($current2.AssocName)
       {
         $entityAssociationTag = New-Object Ellucian.WebServices.VS.Contract.Generator.Entity.EntityAssociationTag
@@ -603,6 +659,7 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
 
         foreach ($current3 in $current2.AssocMembers)
         {
+          Write-Verbose "Processing member: $current3 in association: $current2"
           $entityAssociationMemberTag = New-Object Ellucian.WebServices.VS.Contract.Generator.Entity.EntityAssociationMemberTag
 
           $entityAssociationMemberTag.name = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($current3.AssocMemberName)
@@ -621,7 +678,7 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
   return $entityDataModelGeneratorXml
 }
 
-function CreateFileDetails {
+function New-FileDetails {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1)]
@@ -638,15 +695,18 @@ function CreateFileDetails {
   )
 
 
-  
+  Write-Verbose "Add Assembly System.Web, System.XML, Ellucian.WebServices.VS.DataModels and Ellucian.WebServices.VS.Ext"
   Add-Type -AssemblyName System.Web
   Add-Type -AssemblyName System.Xml
-  Add-Type -Path .\Ellucian.WebServices.VS.DataModels.dll
-  Add-Type -Path .\Ellucian.WebServices.VS.Ext.dll
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
   
+  Write-Verbose "Get the Colleague Settings from the AppConfig"
   $colleagueParams = [System.Web.Configuration.WebConfigurationManager]::GetSection("ColleagueSettings/DmiParameters") -as [Ellucian.WebServices.Core.Config.DmiParameterCustomSection]
   $colleagueEnv = New-Object Ellucian.WebServices.VS.DataModels.ColleagueEnvironment
   $session = Get-ColleagueSession
+  
+  Write-Verbose "Set the ColleagueEnvironment Settings from the Colleague Session and Colleague Settings"
   $colleagueEnv.UserName = $session.WebUserID
   $colleagueEnv.ConnectionName = $colleagueEnv.Account =  $colleagueParams.Environment
   $colleagueEnv.HostAddr = $colleagueParams.Address
@@ -672,14 +732,21 @@ function CreateFileDetails {
   return $returnVal
 }
 
-function CreateTransform {
+function New-EntityTransform {
   [CmdletBinding()]
   param(
+    [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+    [Ellucian.WebServices.VS.Contract.Generator.Entity.EntityDataModelGeneratorXml]
     $fileModel
   )
+  BEGIN {}
   
-  $fileModel.Entities.LegacyFile.name = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($fileModel.Entities.LegacyFile.name)
-  $modeltemplate = @"
+  PROCESS {
+      Write-Verbose "Creating C# template from $fileModel"
+      $fileModel.Entities.LegacyFile.name = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($fileModel.Entities.LegacyFile.name)
+      
+      Write-Verbose "Head of template contains Recordkey and _AppServerVersion"
+      $modeltemplate = @"
 //------------------------------------------------------------------------------
 // <auto-generated>
 //     This code was generated by the "(DSL/T4 Generator - Version 1.1)" 
@@ -732,9 +799,11 @@ namespace $($fileModel.dataContractNamespace)
     }
 
 "@
-  [int] $elementCount = 0
-  if ($fileModel.Entities.LegacyFile.impementedInterface -eq "IColleagueGuidEntity") {
-    $modeltemplate += @"
+      
+      [int] $elementCount = 0
+      if ($fileModel.Entities.LegacyFile.impementedInterface -eq "IColleagueGuidEntity") {
+        Write-Verbose "If $fileModel implements the IColleagueGuidEntity Interface, add the Record Guid and Record Model Name"
+        $modeltemplate += @"
 
     /// <summary>
     /// Record GUID
@@ -748,47 +817,49 @@ namespace $($fileModel.dataContractNamespace)
     [DataMember(Name = "RecordModelName")]
     public string RecordModelName { get; set; }
 "@
-  }
+      }
 
-  [int] $elementCount = 0
-  foreach($element in $fileModel.Entities.LegacyFile.Contents.EntityDataElement)
-  {
-    $modeltemplate += @"
+      [int] $elementCount = 0
+      foreach($element in $fileModel.Entities.LegacyFile.Contents.EntityDataElement)
+      {
+        Write-Verbose "Add element ($element) to the C# output file"
+        $modeltemplate += @"
 
     /// <summary>
     /// CDD Name: $($element.comment)
     /// </summary>
     [DataMember(Order = $($element.orderNumber), Name = "$($element.legacyName)")]
 "@
-    if($element.dataType -notin @("string", "int", "int?", "long", "long?")){ # convert if the format is not one of the primitive types
-      $modeltemplate += @"
+        
+        if($element.dataType -notin @("string", "int", "int?", "long", "long?")){ # convert if the format is not one of the primitive types
+          $modeltemplate += @"
 
     [DisplayFormat(DataFormatString = "$($element.displayFormat)")]
     [ColleagueDataMember(UseEnvisionInternalFormat = true)]
 "@
-    }
+        }
 
-    if ($element.isList -or $element.isAssociated) {
-      $modeltemplate += @"
+        if ($element.isList -or $element.isAssociated) {
+          $modeltemplate += @"
 
     public List<$($element.DataType)> $($element.Name) { get; set; }
 
 "@
-    }
-    else {
-      $modeltemplate += @"
+        }
+        else {
+          $modeltemplate += @"
 
     public $($element.DataType) $($element.Name) { get; set; }
 
 "@
-    }
+        }
 
-    $elementCount += 1
-  }
+        $elementCount += 1
+      }
 
-  foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
-  {
-    $modeltemplate += @"
+      foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
+      {
+        $modeltemplate += @"
 
     /// <summary>
     /// Entity association member
@@ -797,36 +868,40 @@ namespace $($fileModel.dataContractNamespace)
     public List<$($fileModel.entities.legacyFile.name)$($assoc.name)> $($assoc.name)EntityAssociation { get; set; }
 
 "@
-    $elementCount += 1
-  }
+        
+        $elementCount += 1
+      }
 
-  if($fileModel.Type -eq "BLOB" -and $elementCount -eq 0)
-  {
-    $modeltemplate += @"
+      if($fileModel.Type -eq "BLOB" -and $elementCount -eq 0)
+      {
+        $modeltemplate += @"
 
     [DataMember(Order = 0)]
     public List<string> FieldCollection { get; set; }
 
 "@
-  }
-  $modeltemplate += @"
+      }
+      
+      $modeltemplate += @"
   
     // build up all the Associated objects and add them to the properties
     public void buildAssociations()
     {
 "@
-  foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
-  {
-    $modeltemplate += @"
+      
+      foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
+      {
+        $modeltemplate += @"
 
       // EntityAssociation Name: $($assoc.OrigName)
 
       $($assoc.Name)EntityAssociation = new List<$($fileModel.entities.legacyFile.name)$($assoc.name)>();
 "@
-    $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController)[0].Name
-    if(!$controllerName){ $controllerName = $assoc.EntityassociationMembers.EntityAssociationMember[0].Name}
+        
+        $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController)[0].Name
+        if(!$controllerName){ $controllerName = $assoc.EntityassociationMembers.EntityAssociationMember[0].Name}
 
-    $modeltemplate += @"
+        $modeltemplate += @"
 
       if($controllerName != null)
       {
@@ -834,24 +909,24 @@ namespace $($fileModel.dataContractNamespace)
         for(int i = 0; i < num$($assoc.Name); i++)
         {
 "@
-    $valIndex = 0
-    foreach($ascMember2 in $assoc.EntityAssociationMembers.EntityAssociationMember)
-    {
-      $initVal = '""'
+        $valIndex = 0
+        foreach($ascMember2 in $assoc.EntityAssociationMembers.EntityAssociationMember)
+        {
+          $initVal = '""'
 
-      if($ascMember2.dataType -notmatch "string"){
-        $initVal = "null"
-      }
+          if($ascMember2.dataType -notmatch "string"){
+            $initVal = "null"
+          }
 
-      if($ascMember2.Name -match $controllerName) {
-        $modeltemplate += @"
+          if($ascMember2.Name -match $controllerName) {
+            $modeltemplate += @"
 
           $($ascMember2.DataType) value$valIndex = $initVal;
           value$valIndex = $($ascMember2.Name)[i];
 "@
-      }
-      else {
-        $modeltemplate += @"
+          }
+          else {
+            $modeltemplate += @"
 
           $($ascMember2.DataType) value$valIndex = $initVal;
           if($($ascMember2.Name) != null && i < $($ascMember2.Name).Count)
@@ -859,34 +934,34 @@ namespace $($fileModel.dataContractNamespace)
             value$valIndex = $($ascMember2.Name)[i];
           }
 "@
-      }
+          }
 
-      $valIndex += 1
-    }
+          $valIndex += 1
+        }
 
-    $modeltemplate += @"
+        $modeltemplate += @"
 
           $($assoc.Name)EntityAssociation.Add(new $($fileModel.entities.legacyFile.name)$($assoc.name)(
 "@
-    $counter = 0
-    foreach($ascMember2 in $assoc.EntityAssociationMembers.EntityAssociationMember)
-    {
-      $modeltemplate += "value$counter"
-      $counter += 1
-      if($counter -ne $assoc.EntityAssociationMembers.EntityAssociationMember.Count){ $modeltemplate += ","}
-    }
-    $modeltemplate += "));`r`n`r`n        }`r`n      }"
-  }
+        $counter = 0
+        foreach($ascMember2 in $assoc.EntityAssociationMembers.EntityAssociationMember)
+        {
+          $modeltemplate += "value$counter"
+          $counter += 1
+          if($counter -ne $assoc.EntityAssociationMembers.EntityAssociationMember.Count){ $modeltemplate += ","}
+        }
+        $modeltemplate += "));`r`n`r`n        }`r`n      }"
+      }
 
-  $modeltemplate += @"
+      $modeltemplate += @"
   
     }
   }
 "@
-    
-  foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
-  {
-    $modeltemplate += @"
+        
+      foreach($assoc in $fileModel.Entities.LegacyFile.Contents.EntityAssociation)
+      {
+        $modeltemplate += @"
 
 
   // EntityAssociation classes
@@ -895,83 +970,50 @@ namespace $($fileModel.dataContractNamespace)
   public partial class $($fileModel.entities.legacyFile.name)$($assoc.name)
   {
 "@
-    foreach($ascMember3 in $assoc.EntityAssociationMembers.EntityAssociationMember)
-    {
-      $modeltemplate += @"
+       
+        foreach($ascMember3 in $assoc.EntityAssociationMembers.EntityAssociationMember)
+        {
+          $modeltemplate += @"
 
     public $($ascMember3.DataType) $($ascMember3.Name)AssocMember;
 "@
-    }
-    
-    $modeltemplate += @"
+        }
+        
+        $modeltemplate += @"
 
     public $($fileModel.entities.legacyFile.name)$($assoc.name) () {}
     public $($fileModel.entities.legacyFile.name)$($assoc.name) (
 "@
-    $counter = 0
-    foreach($ascMember4 in $assoc.EntityAssociationMembers.EntityAssociationMember)
-    {
-      $modeltemplate += "`r`n      $($ascMember4.DataType) in$($ascMember4.name)"
-      $counter += 1
-      if($counter -ne $assoc.EntityAssociationMembers.EntityAssociationMember.Count){ $modeltemplate += ","}
-    }
-    $modeltemplate += ")`r`n    {"
+        $counter = 0
+        foreach($ascMember4 in $assoc.EntityAssociationMembers.EntityAssociationMember)
+        {
+          $modeltemplate += "`r`n      $($ascMember4.DataType) in$($ascMember4.name)"
+          $counter += 1
+          if($counter -ne $assoc.EntityAssociationMembers.EntityAssociationMember.Count){ $modeltemplate += ","}
+        }
+        $modeltemplate += ")`r`n    {"
 
-    foreach($ascMember5 in $assoc.EntityAssociationMembers.EntityAssociationMember)
-    {
-      $modeltemplate += "`r`n      $($ascMember5.Name)AssocMember = in$($ascMember5.Name);"
-    }
+        foreach($ascMember5 in $assoc.EntityAssociationMembers.EntityAssociationMember)
+        {
+          $modeltemplate += "`r`n      $($ascMember5.Name)AssocMember = in$($ascMember5.Name);"
+        }
 
-    $modeltemplate +=@"
+        $modeltemplate +=@"
     
     }
   }
 "@
-  }
-    $modeltemplate +=@"
+      }
+        $modeltemplate +=@"
 
 }
 "@
-  return $modeltemplate
+      return $modeltemplate
+  }
+  
+  END {}
 }
   
 #endregion VSExtUtilitiesrebuild
-
-function AddColleagueCreds {
-    param(
-        [string]
-        $username,
-        [string]
-        $password
-    )
-    
-    AddUpdateAppSettings "colleagueUserName" $username
-    AddUpdateAppSettings "colleagueUserPassword" $password
-}
-function AddUpdateAppSettings {
-  param(
-    [string]
-    $key,
-    [string]
-    $value
-  )
-  try
-  {
-    $configFile = [System.Configuration.ConfigurationManager]::OpenExeConfiguration([System.Configuration.ConfigurationUserLevel]::None)
-    $settings = $configFile.AppSettings.Settings
-    if($settings[$key]){
-    $settings[$key].Value = $value
-    }
-    else {
-    $settings.Add($key, $value)
-    }
-
-    $configFile.Save([System.Configuration.ConfigurationSaveMode]::Modified)
-    [System.Configuration.ConfigurationManager]::RefreshSection($configFile.AppSettings.SectionInformation.Name)
-  }
-  catch{
-    $_
-  }
-}
 
 Initialize-ColleagueService
