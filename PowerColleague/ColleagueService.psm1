@@ -1,4 +1,4 @@
-#region SessionInfo
+#region ModuleSettings
 function Set-AppConfig{
 	param(
 		[Parameter(Mandatory=$true, Position=1)]
@@ -8,6 +8,44 @@ function Set-AppConfig{
 	
 	Add-Type -AssemblyName System.Configuration
     [System.AppDomain]::CurrentDomain.SetData("APP_CONFIG_FILE", $AppConfigPath)
+}
+
+function Set-ColleagueCreds {
+    param(
+        [string]
+        $username,
+        [string]
+        $password
+    )
+    
+    AddUpdateAppSettings "colleagueUserName" $username
+    AddUpdateAppSettings "colleagueUserPassword" $password
+}
+
+function Set-AppSettings {
+  param(
+    [string]
+    $key,
+    [string]
+    $value
+  )
+  try
+  {
+    $configFile = [System.Configuration.ConfigurationManager]::OpenExeConfiguration([System.Configuration.ConfigurationUserLevel]::None)
+    $settings = $configFile.AppSettings.Settings
+    if($settings[$key]){
+    $settings[$key].Value = $value
+    }
+    else {
+    $settings.Add($key, $value)
+    }
+
+    $configFile.Save([System.Configuration.ConfigurationSaveMode]::Modified)
+    [System.Configuration.ConfigurationManager]::RefreshSection($configFile.AppSettings.SectionInformation.Name)
+  }
+  catch{
+    $_
+  }
 }
 
 function Initialize-ColleagueService{
@@ -51,7 +89,9 @@ function Initialize-ColleagueService{
       'Ellucian.Dmi.Runtime, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb'
     )
 }
+#endregion ModuleSettings
 
+#region SessionInfo
 function Get-SessionTimeout {
     $script:timeoutDate
 }
@@ -151,7 +191,7 @@ function Get-TableInfo{
   
   if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
     $app = Get-AppsForEntity $TableName
-    $testsource = Get-TestDetails $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
+    $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
   }
   $dataReader = Get-DataReader
@@ -371,7 +411,7 @@ namespace ColleagueSDK.DataContracts
   END {}
 }
 
-function Get-TestDetails{
+function Get-EntityModel {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1)]
@@ -386,21 +426,21 @@ function Get-TestDetails{
 
 switch ($PSCmdlet.ParameterSetName)
   {
-    "p2" { $fileDetails = CreateFileDetails $App $FileName -DetailMode }
-    default{$fileDetails = CreateFileDetails $App $FileName -FieldNames $FieldNames}
+    "p2" { $fileDetails = New-FileDetails $App $FileName -DetailMode }
+    default{$fileDetails = New-FileDetails $App $FileName -FieldNames $FieldNames}
   }
   
-  $entityDataModelGenerator = CreateEntityGeneratorInput $fileDetails 
+  $entityDataModelGenerator = New-EntityGeneratorInput $fileDetails 
   
   $entityDataModelGenerator.dataContractNamespace = "ColleagueSDK.DataContracts"
   $entityDataModelGenerator.dateTime = Get-Date
 
-  return CreateTransform $entityDataModelGenerator
+  return New-EntityTransform $entityDataModelGenerator
 }
 #endregion ColleagueInfo
 
 #region VSExtUtilitiesRebuild
-function CreateEntityGeneratorInput{
+function New-EntityGeneratorInput{
   param(
     [Ellucian.WebServices.VS.DataModels.ColleagueFileDetails]
     $FileDetails
@@ -621,7 +661,7 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
   return $entityDataModelGeneratorXml
 }
 
-function CreateFileDetails {
+function New-FileDetails {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1)]
@@ -672,7 +712,7 @@ function CreateFileDetails {
   return $returnVal
 }
 
-function CreateTransform {
+function New-EntityTransform {
   [CmdletBinding()]
   param(
     $fileModel
@@ -936,42 +976,5 @@ namespace $($fileModel.dataContractNamespace)
 }
   
 #endregion VSExtUtilitiesrebuild
-
-function AddColleagueCreds {
-    param(
-        [string]
-        $username,
-        [string]
-        $password
-    )
-    
-    AddUpdateAppSettings "colleagueUserName" $username
-    AddUpdateAppSettings "colleagueUserPassword" $password
-}
-function AddUpdateAppSettings {
-  param(
-    [string]
-    $key,
-    [string]
-    $value
-  )
-  try
-  {
-    $configFile = [System.Configuration.ConfigurationManager]::OpenExeConfiguration([System.Configuration.ConfigurationUserLevel]::None)
-    $settings = $configFile.AppSettings.Settings
-    if($settings[$key]){
-    $settings[$key].Value = $value
-    }
-    else {
-    $settings.Add($key, $value)
-    }
-
-    $configFile.Save([System.Configuration.ConfigurationSaveMode]::Modified)
-    [System.Configuration.ConfigurationManager]::RefreshSection($configFile.AppSettings.SectionInformation.Name)
-  }
-  catch{
-    $_
-  }
-}
 
 Initialize-ColleagueService
