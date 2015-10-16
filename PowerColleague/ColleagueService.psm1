@@ -72,6 +72,9 @@ function Initialize-ColleagueService{
     Add-Type -Path "$EllucianPath\slf4net.dll" # This will give an error if it's not included
     Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
     
+    Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
+    Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
+    
     # The below is required for Console based applications
     $newObj = New-Object System.Object
     [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.Initialize()
@@ -144,88 +147,6 @@ function Get-ColleagueSession{
 #endregion SessionInfo
 
 #region ColleagueInfo
-
-function Get-DataReader {
-  New-Object Ellucian.Data.Colleague.ColleagueDataReader(Get-ColleagueSession)
-}
-
-function Get-TransactionInvoker {
-  New-Object Ellucian.Data.Colleague.ColleagueTransactionInvoker(Get-ColleagueSession)
-}
-
-function Read-TableKeys{
-  param(
-    [Parameter(Mandatory=$true, Position=1)]
-    [string]
-    $EntityTableName,
-    [string]
-    $Filter = ""
-  )
-  $dataReader = Get-DataReader
-
-  $dataReader.Select($EntityTableName.ToUpper(), $Filter)
-}
-
-function Get-AppsForEntity {
-  param(
-    [string] $entity
-  )
-  $appEntities = Get-AllApplications | Get-ApplicationEntities
-  $returnVal = $appEntities | ? {$_.Entities -contains $entity.ToUpper()} | % {$_.Application}
-  $returnVal
-}
-
-function Read-TableInfo{
-  param(
-    [Parameter(Mandatory=$true, Position=1)]
-    [string]
-    $TableName,
-    [Parameter(ParameterSetName="p1", Position=0)]
-    [string]
-    $Filter = "",
-    [Parameter(ParameterSetName="p2", Position=0)]
-    [string[]]
-    $FilterKeys,
-    #[Parameter(ParameterSetName="p3", Position=0)]
-    #[string]
-    #$PhysicalFileName,
-    [switch]
-    $ReplaceTextVMs
-  )
-  
-  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
-    $app = Get-AppsForEntity $TableName
-    $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
-    Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
-  }
-  $dataReader = Get-DataReader
-
-  $invalidRecords = New-Object 'System.Collections.Generic.Dictionary[string,string]'
-
-  $type = (New-Object "ColleagueSDK.DataContracts.$TableName").getType()
-  switch ($PSCmdlet.ParameterSetName)
-  {
-    "p2" {
-      $returned = .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
-    }
-
-    #"p3" {
-    #}
-
-    default {
-      .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($Filter, [bool]$ReplaceTextVMs)
-    }
-  }
-
-
-}
-
-function Invoke-CTX{
-  param($typeRequest, $typeResponse, $request)
-  $trans = Get-TransactionInvoker
-  .\Invoke-GenericMethod.ps1 $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
-}
-
 function Get-AllApplications{
 $AllApps = @"
 //------------------------------------------------------------------------------
@@ -311,6 +232,164 @@ namespace ColleagueSDK.DataContracts
   $typeResponse = (New-Object ColleagueSDK.DataContracts.GetAllApplsResponse).getType()
   $apps = Invoke-CTX $typeRequest $typeResponse $request
   $apps.Applications | % Application
+}
+
+function Get-ColleagueEnv {
+  [CmdletBinding()]
+  param()
+  
+  $colleagueParams = [System.Web.Configuration.WebConfigurationManager]::GetSection("ColleagueSettings/DmiParameters") -as [Ellucian.WebServices.Core.Config.DmiParameterCustomSection]
+  $colleagueEnv = New-Object Ellucian.WebServices.VS.DataModels.ColleagueEnvironment
+  
+  $session = Get-ColleagueSession
+  
+  Write-Verbose "Set the ColleagueEnvironment Settings from the Colleague Session and Colleague Settings"
+  $colleagueEnv.UserName = $session.WebUserID
+  $colleagueEnv.ConnectionName = $colleagueEnv.Account =  $colleagueParams.Environment
+  $colleagueEnv.HostAddr = $colleagueParams.Address
+  $colleagueEnv.HostPort = $colleagueParams.Port
+  $colleagueEnv.SecurityToken = $session.SecurityToken
+  $colleagueEnv.ClientControlId = $session.SenderControlId
+  
+  return $colleagueEnv
+}
+
+#region ColleagueCTX
+function Get-ApplicationCtxs {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+    [string[]] $applicationNames
+  )
+
+  BEGIN { }
+  
+  PROCESS {
+    #$rtnObj = New-Object PSObject
+    Write-Verbose "All ApplicationNames $ApplicationNames"
+    foreach ($appnme in $ApplicationNames){
+      $rtnObj = New-Object PSObject
+      $appname = $appnme.ToUpper()
+      Add-Member -InputObject $rtnObj -MemberType NoteProperty -Name Application -Value $appname
+      $request = New-Object Ellucian.WebServices.VS.DataModels.GetApplCTXRequest
+      $request.Application = $appname
+      Write-Verbose "Request is $request with $($request.Application)"
+     
+      $typeRequest = $request.getType()
+      $typeResponse = (New-Object Ellucian.WebServices.VS.DataModels.GetApplCTXResponse).getType()
+      
+      $ctxs = Invoke-CTX $typeRequest $typeResponse $request
+      Write-Verbose "Received $ctxs back"
+      Add-Member -InputObject $rtnObj -MemberType NoteProperty -Name Transactions -Value $ctxs.Processes
+      Write-Output $rtnObj
+    }
+    #return $rtnObj
+  }
+  
+  END {}
+}
+
+function Get-CtxModel {
+  param(
+    [string] $App,
+    [string] $TransactionId
+  )
+  
+ 
+
+  $colleagueEnv = Get-ColleagueEnv
+  $genDataDetail = New-CtxDetails $App $TransactionId
+  $ctxDataModel = New-CtxGeneratorInput $genDataDetail
+  
+  $ctxDataModel.dataContractNamespace = "ColleagueSDK.DataContracts"
+  $ctxDataModel.dateTime = Get-Date
+  $ctxDataModel.environment = $colleagueEnv.ConnectionName
+  $ctxDataModel.userName = $colleagueEnv.UserName
+  
+  return New-CtxTransform $ctxDataModel
+}
+
+function Invoke-CTX{
+  param($typeRequest, $typeResponse, $request)
+  $trans = Get-TransactionInvoker
+  .\Invoke-GenericMethod.ps1 $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
+}
+
+function Get-TransactionInvoker {
+  New-Object Ellucian.Data.Colleague.ColleagueTransactionInvoker(Get-ColleagueSession)
+}
+#endregion ColleagueCTX
+
+#region ColleagueEntities
+function Get-DataReader {
+  New-Object Ellucian.Data.Colleague.ColleagueDataReader(Get-ColleagueSession)
+}
+
+function Read-TableKeys{
+  param(
+    [Parameter(Mandatory=$true, Position=1)]
+    [string]
+    $EntityTableName,
+    [string]
+    $Filter = ""
+  )
+  $dataReader = Get-DataReader
+
+  $dataReader.Select($EntityTableName.ToUpper(), $Filter)
+}
+
+function Get-AppsForEntity {
+  param(
+    [string] $entity
+  )
+  $appEntities = Get-AllApplications | Get-ApplicationEntities
+  $returnVal = $appEntities | ? {$_.Entities -contains $entity.ToUpper()} | % {$_.Application}
+  $returnVal
+}
+
+function Read-TableInfo{
+  param(
+    [Parameter(Mandatory=$true, Position=1)]
+    [string]
+    $TableName,
+    [Parameter(ParameterSetName="p1", Position=0)]
+    [string]
+    $Filter = "",
+    [Parameter(ParameterSetName="p2", Position=0)]
+    [string[]]
+    $FilterKeys,
+    #[Parameter(ParameterSetName="p3", Position=0)]
+    #[string]
+    #$PhysicalFileName,
+    [switch]
+    $ReplaceTextVMs
+  )
+  
+  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
+    $app = Get-AppsForEntity $TableName
+    $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
+    Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
+  }
+  $dataReader = Get-DataReader
+
+  $invalidRecords = New-Object 'System.Collections.Generic.Dictionary[string,string]'
+
+  $type = (New-Object "ColleagueSDK.DataContracts.$TableName").getType()
+  switch ($PSCmdlet.ParameterSetName)
+  {
+    "p2" {
+      $returned = .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
+    }
+
+    #"p3" {
+    #}
+
+    default {
+      .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($Filter, [bool]$ReplaceTextVMs)
+    }
+  }
+
+
 }
 
 function Get-ApplicationEntities {
@@ -446,10 +525,12 @@ switch ($PSCmdlet.ParameterSetName)
   Write-Verbose "Transform the generator to C# code and return"
   return New-EntityTransform $entityDataModelGenerator
 }
+#endregion ColleagueEntities
+
 #endregion ColleagueInfo
 
 #region VSExtUtilitiesRebuild
-function New-EntityGeneratorInput{
+function New-EntityGeneratorInput {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true)]
@@ -695,24 +776,13 @@ function New-FileDetails {
   )
 
 
-  Write-Verbose "Add Assembly System.Web, System.XML, Ellucian.WebServices.VS.DataModels and Ellucian.WebServices.VS.Ext"
+  Write-Verbose "Add Assembly System.Web, System.XML"
   Add-Type -AssemblyName System.Web
   Add-Type -AssemblyName System.Xml
-  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
-  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
   
   Write-Verbose "Get the Colleague Settings from the AppConfig"
-  $colleagueParams = [System.Web.Configuration.WebConfigurationManager]::GetSection("ColleagueSettings/DmiParameters") -as [Ellucian.WebServices.Core.Config.DmiParameterCustomSection]
-  $colleagueEnv = New-Object Ellucian.WebServices.VS.DataModels.ColleagueEnvironment
-  $session = Get-ColleagueSession
   
-  Write-Verbose "Set the ColleagueEnvironment Settings from the Colleague Session and Colleague Settings"
-  $colleagueEnv.UserName = $session.WebUserID
-  $colleagueEnv.ConnectionName = $colleagueEnv.Account =  $colleagueParams.Environment
-  $colleagueEnv.HostAddr = $colleagueParams.Address
-  $colleagueEnv.HostPort = $colleagueParams.Port
-  $colleagueEnv.SecurityToken = $session.SecurityToken
-  $colleagueEnv.ClientControlId = $session.SenderControlId
+  $colleagueEnv = Get-ColleagueEnv
   
   if(!$FieldNames){$FieldNames = New-Object Collections.Generic.List[String]}
   
@@ -1014,6 +1084,402 @@ namespace $($fileModel.dataContractNamespace)
   END {}
 }
   
+  
+function New-CtxTransform {
+  [CmdletBinding()]
+  param(
+    $ctxModel
+  )
+
+  #region NestedFunctions
+  function Assert-IsInbound {
+    param( [string] $test)
+    $test -in @("IN", "INOUT")
+  }
+
+  function Assert-IsOutbound {
+    param( [string] $test)
+    $test -in @("OUT", "INOUT")
+  }
+
+  function Get-DatatelBooleanAttribute {
+    param( 
+      [string] $type,
+      [switch] $leadingComma
+    )
+
+    $retVal = [string]::Empty
+
+    if($leadingComma){ $retVal += "," }
+
+    $retVal = switch ($type) {
+      "BooleanYN" { "$retVal UseEnvisionBooleanConventions = EnvisionBooleanTypesEnum.YesNo" }
+      "Boolean10" { "$retVal UseEnvisionBooleanConventions = EnvisionBooleanTypesEnum.OneZero" }
+      default { [String]::Empty }
+    }
+
+    $retVal
+  }
+  
+  function ConvertTo-ClrType {
+    param ([string] $type)
+
+    switch -regex ($type) {
+        "^(?:(?:Multiline)Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
+        "BooleanYN" { "bool" }
+        "Boolean10" { "bool10" }
+        "Uri" { "uri" }
+        "Date|Time" { "DateTime" }
+        "Integer" { "int" }
+        "Double|Decimal|Long|Float" { $_.ToLower() }
+        "RealNumber" { "single" }
+        default { "object" }
+    }
+  }
+  #endregion NestedFunctions
+
+  $tx = $ctxModel.Transactions.legacyProcess[0]
+  $modelTemplate = @"
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by the "(DSL/T4 Generator - Version 1.1)" 
+//      Copy-Cat Generator in PowerShell by Roger Garrison
+//     Last generated on $($ctxModel.dateTime) by user $($ctxModel.userName)
+//
+//     Type: CTX
+//     Transaction ID: $($tx.ColleagueId)
+//     Application: $($ctxModel.application)
+//     Environment: $($ctxModel.environment)
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Web;
+using System.Runtime.Serialization;
+using System.CodeDom.Compiler;
+using Ellucian.Dmi.Runtime;
+using Ellucian.Data.Colleague;
+
+namespace $($ctxModel.dataContractNamespace) 
+{
+
+"@
+  
+  # Go through each group of elements
+  $firstGroup = $true
+  foreach($grp in $ctxModel.Groups.Group)
+  {
+    # Only include group if at least one element is inbound or outbound
+    $isGroupOutbound = $isGroupInbound = $false
+    foreach($mbr in $grp.GroupMembers.GroupMember)
+    {
+      $isGroupInbound = Assert-IsInbound $mbr.direction
+      $isGroupOutbound = Assert-IsOutbound $mbr.direction
+    }
+
+    # Only include group if it's inbound and/or outbound
+    if( $isGroupInbound -or $isGroupOutbound) {
+      if( -not $firstGroup) # i'm not sure why this is an empty if ... keep it for now
+      {
+      }
+
+      $firstGroup = $false
+
+      $modelTemplate += @"
+  [DataContract]
+  public partial class $($grp.Name)
+  {
+  
+"@
+      $firstGroupMember =  $isController = $true
+      foreach($mbr in $grp.GroupMembers.GroupMember)
+      {
+        # Only include members if it's inbound and/or outbound
+        $elementIsInbound = Assert-IsInbound $mbr.direction
+        $elementIsOutbound =  Assert-IsOutbound $mbr.direction
+ 
+        # Controller is foreced inbound/outbound if any elments are
+        if ($isController) {
+          if ($isGroupInbound){ $elementIsInbound = $true }
+          if ($isGroupOutbound){ $elementIsOutbound = $true }
+        }
+
+        if ($elementIsInBound -or $elementIsOutbound) {
+          if (-not $firstGroupMember) { # again, I'm not sure why this is empty ... keep it for now
+          }
+
+          $firstGroupMember = $false
+          # Start with optional comment
+
+          if ($mbr.Comment) {
+            $modelTemplate += @"
+    /// <summary>
+    /// $($mbr.Comment)
+    /// </summary>
+"@
+          }
+
+          if ($mbr.isRequired) {
+            $modelTemplate += "  [DataMember(IsRequired = true)]`r`n"
+          }
+          else {
+            $modelTemplate += "  [DataMember]`r`n"
+          }
+
+          if ($mbr.displayFormat) {
+            $modelTemplate += "    [DisplayFormat(DataFormatString = $($mbr.displayFormat))]`r`n"
+          }
+
+          $sctrqParameters = [String]::Empty
+          # if member is inbound, flag it as such
+          if ($elementIsInbound) {
+            $sctrqParameters += ", InBoundData = true"
+          }
+
+          # if member is outbound, flag it as such
+          if ($elementIsOutbound) {
+            $sctrqParameters += ", OutBoundData = true"
+          }
+
+          $datatelBooleanAttr = Get-DatatelBooleanAttribute $mbr.dataType
+          $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($mbr.LegacyName)`"$datatelBooleanAttr$sctrqParameters)]`r`n"
+
+          $clrType = ConvertTo-ClrType $mbr.dataType
+          
+          if ($clrType -match "string|bool10" ) {
+            $modelTemplate += "    public $clrType $($mbr.Name) { get; set; }`r`n`r`n"
+          }
+          elseif ($clrType -match "uri") {
+            $modelTemplate += "    public Uri $($mbr.Name) { get; set; }`r`n`r`n"
+          }
+          else {
+            $modelTemplate += "    public Nullable<$clrType> $($mbr.Name) { get; set; }`r`n`r`n"
+          }
+
+          $isController = $false
+        }
+      }
+      $modelTemplate += "  }`r`n"
+    }
+  }
+
+  $firstDataContract = $firstGroup
+  foreach( $i in 0..1)
+  {
+    $initStmts = @()
+
+    $isGlobalInbound = $false
+    $isGlobalOutbound = $false
+
+    $globalPrefix = [String]::Empty
+
+    switch ($i) {
+      0 {
+          $isGlobalInbound = $true
+          $isGlobalOutbound = $false
+          $globalPrefix = "Request"
+        }
+      1 {
+          $isGlobalInbound = $false
+          $isGlobalOutbound = $true
+          $globalPrefix = "Response"
+        }
+      default { throw  "Too many values"}
+    }
+
+    if ( -not $firstDataContract){# again, I'm not sure why this is empty ... keep it for now
+    }
+
+    $anonymous = [String]::Empty
+
+    if($tx.isAnonymous) { $anonymous += ", PublicTransaction = true"}
+
+    $modelTemplate += @"
+  [GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
+  [DataContract]
+  [ColleagueDataContract(ColleagueId = "$($tx.colleagueId)", GeneratedDateTime = "$($ctxModel.dateTime)", User = "$($ctxModel.userName)")]
+  [SctrqDataContract(Application = "$($ctxModel.Application)", DataContractVersion = $($ctxModel.DataContractVersion)$anonymous)]
+  public partial class $($tx.Name)$globalPrefix
+  {
+    /// <summary>
+    /// Version
+    /// </summary>
+    [DataMember]
+    public int _AppServerVersion { get; set; }
+
+
+"@
+    $firstContent = $true
+    foreach($fld in $tx.contents.dataElement)
+    {
+      if (( (Assert-IsInbound $fld.Direction) -and $isGlobalInbound) -or ( (Assert-IsOutbound $fld.Direction) -and $isGlobalOutbound)){
+        if ( -not $firstContent) { #this is getting annoying, why are all of these empty?
+        }
+
+        $firstContent = $false
+
+        # Start with optional comment
+        if ($fld.comment){
+          $modelTemplate += @"
+    /// <summary>
+    /// $($fld.comment)
+    /// </summary>
+"@
+        }
+
+        # if data element is required, flag it
+        if ($fld.isRequired) {
+          $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
+        }
+        else
+        {
+          $modelTemplate += "    [DataMember]`r`n"
+        }
+
+        if ($fld.displayFormat) {
+          $modelTemplate += "   [DisplayFormat(DataFormatString = `"$($fld.displayFormat)`")]`r`n"
+        }
+
+        $sctrqParameters = [String]::Empty
+        # if data element is inbound, flag it
+        if ((Assert-IsInbound $fld.direction) -and $isGlobalInbound){ 
+          $sctrqParameters += ", InBoundData = true"
+        }
+
+        # if data element is outbound, flag it
+        if ((Assert-IsOutbound $fld.direction) -and $isGlobalOutbound){ 
+          $sctrqParameters += ", OutBoundData = true"
+        }
+
+        $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($fld.legacyName)`"$(Get-DatatelBooleanAttribute $fld.DataType -LeadingComma)$sctrqParameters)]`r`n"
+
+        $clrType = ConvertTo-ClrType $fld.DataType
+        if ($clrType -match "string") {
+          # Only CDD Elements can be of type list, and lists cannot be in groups
+          if ($fld.isList) {
+            $modelTemplate += "    public List<string> $($fld.Name) { get; set; }`r`n`r`n"
+            $initStmts += "$($fld.Name) = new List<string>();"
+          }
+          else {
+            $modelTemplate += "    public string $($fld.Name) { get; set; }`r`n`r`n"
+          }
+        }
+        elseif ($clrType -match "bool10") {
+          if ($fld.isList) {
+            $modelTemplate += "    public List<bool> $($fld.Name) { get; set; }`r`n`r`n"
+            $initStmts += "$($fld.Name) = new List<bool>();"
+          }
+          else {
+            $modelTemplate += "    public bool $($fld.Name) { get; set; }`r`n`r`n"
+          }
+        }
+        elseif ($clrType -match "uri") {
+          if ($fld.isList) {
+            $modelTemplate += "    public List<Uri> $($fld.Name) { get; set; }`r`n`r`n"
+            $initStmts += "$($fld.Name) = new List<Uri>();"
+          }
+          else {
+            $modelTemplate += "    public Uri $($fld.Name) { get; set; }`r`n`r`n"
+          }
+        }
+        else{
+          if ($fld.isList) {
+            $modelTemplate += "    public List<Nullable<$($clrType)>> $($fld.Name) { get; set; }`r`n`r`n"
+            $initStmts += "$($fld.Name) = new List<Nullable<$($clrType)>>();"
+          }
+          else {
+            $modelTemplate += "    public Nullable<$($clrType)> $($fld.Name) { get; set; }`r`n`r`n"
+          }
+        }
+      }
+    }
+
+    foreach($grpref in $tx.contents.groupReference)
+    {
+      $grp = $ctxModel.groups.Group | ? {$_.name -eq $grpref.name}
+      # only include group if at least one element is inbound our outbound or required
+
+      $isGroupRequired = $isGroupOutbound = $isGroupInbound = $false
+      foreach($mbr in $grp.GroupMembers.GroupMember)
+      {
+        $isGroupInbound = Assert-IsInbound $mbr.Direction
+        $isGroupOutBound = Assert-IsOutbound $mbr.direction
+
+        $isGroupRequired = $mbr.isRequired
+      }
+
+      # Only include group if it is inbound and/or outbound 
+      if (($isGroupInbound -and $isGlobalInbound) -or ($isGroupOutbound -and $isGlobalOutbound)){
+        if ( -not $firstContent) { # again! 
+        }
+        $firstContent = $false
+        # if group is required, flag it
+        if ($isGroupRequired){
+          $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
+        }
+        else {
+          $modelTemplate += "    [DataMember]`r`n"
+        }
+        $sctrqParameters = [string]::Empty
+
+        if ($isGroupInbound -and $isGlobalInbound){
+          $sctrqParameters += ", InBoundData = true"
+        }
+
+        if ($isGroupOutbound -and $isGlobalOutbound){
+          $sctrqParameters += ", OutBoundData = true"
+        }
+
+        $modelTemplate += @"
+    [SctrqDataMember(AppServerName = "$($grpref.legacyName)"$(Get-DatatelBooleanAttribute $grpref.dataType -LeadingComma)$sctrqParameters)]
+    public List<$($grp.Name)> $($grpref.Name) { get; set; }
+
+
+"@
+        $initStmts += "$($grpref.Name) = new List<$($grp.Name)>();"
+      }
+    }
+    
+    # Constructor that initializes all list<>-type auto properties in this class
+    $modelTemplate += @"
+    public $($tx.Name + $globalPrefix)()
+    {
+      $($initStmts -join "`r`n      ")
+    }
+  }
+
+"@
+  }
+  $modelTemplate += "}`r`n"
+  return $modelTemplate
+}
+
+function New-CtxDetails {
+  param(
+    [string] $Application,
+    [string[]] $TransactionId
+  )
+  $request = New-Object Ellucian.WebServices.VS.DataModels.GetCtxDetailsRequest
+  
+  $request.PrcsId = $TransactionId.ToUpper()
+  $request.Application = $Application.ToUpper()
+  
+  $resp = New-Object Ellucian.WebServices.VS.DataModels.GetCtxDetailsResponse
+  Invoke-CTX $request.GetType() $resp.GetType() $request
+}
+
+function New-CtxGeneratorInput {
+  param(
+    $ctxDetails
+  )
+  [Ellucian.WebServices.VS.Ext.VSExtUtilities]::CreateCtxGeneratorInput($ctxDetails, $ctxDetails.PrcsAliasName)
+}
 #endregion VSExtUtilitiesrebuild
 
 Initialize-ColleagueService
