@@ -1115,7 +1115,7 @@ function New-CtxTransform {
     $retVal = switch ($type) {
       "BooleanYN" { "$retVal UseEnvisionBooleanConventions = EnvisionBooleanTypesEnum.YesNo" }
       "Boolean10" { "$retVal UseEnvisionBooleanConventions = EnvisionBooleanTypesEnum.OneZero" }
-      default { $_ }
+      default { [String]::Empty }
     }
 
     $retVal
@@ -1125,7 +1125,7 @@ function New-CtxTransform {
     param ([string] $type)
 
     switch -regex ($type) {
-        "(?:Multiline)Text" { "string" }
+        "^(?:(?:Multiline)Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
         "BooleanYN" { "bool" }
         "Boolean10" { "bool10" }
         "Uri" { "uri" }
@@ -1304,7 +1304,7 @@ namespace $($ctxModel.dataContractNamespace)
   [DataContract]
   [ColleagueDataContract(ColleagueId = "$($tx.colleagueId)", GeneratedDateTime = "$($ctxModel.dateTime)", User = "$($ctxModel.userName)")]
   [SctrqDataContract(Application = "$($ctxModel.Application)", DataContractVersion = $($ctxModel.DataContractVersion)$anonymous)]
-  public partial $($tx.Name)$globalPrefix
+  public partial class $($tx.Name)$globalPrefix
   {
     /// <summary>
     /// Version
@@ -1334,7 +1334,7 @@ namespace $($ctxModel.dataContractNamespace)
 
         # if data element is required, flag it
         if ($fld.isRequired) {
-          $modelTemplate += "    [DataMember(IsRequired = True)]`r`n"
+          $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
         }
         else
         {
@@ -1342,18 +1342,18 @@ namespace $($ctxModel.dataContractNamespace)
         }
 
         if ($fld.displayFormat) {
-          $modelTemplate += "   [DisplayFormat(DataFormatString = `"$($fld.displayFormat)`"]`r`n"
+          $modelTemplate += "   [DisplayFormat(DataFormatString = `"$($fld.displayFormat)`")]`r`n"
         }
 
         $sctrqParameters = [String]::Empty
         # if data element is inbound, flag it
         if ((Assert-IsInbound $fld.direction) -and $isGlobalInbound){ 
-          $sctrqParameters += ", InboundData = true"
+          $sctrqParameters += ", InBoundData = true"
         }
 
         # if data element is outbound, flag it
         if ((Assert-IsOutbound $fld.direction) -and $isGlobalOutbound){ 
-          $sctrqParameters += ", OutboundData = true"
+          $sctrqParameters += ", OutBoundData = true"
         }
 
         $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($fld.legacyName)`"$(Get-DatatelBooleanAttribute $fld.DataType -LeadingComma)$sctrqParameters)]`r`n"
@@ -1446,7 +1446,6 @@ namespace $($ctxModel.dataContractNamespace)
     
     # Constructor that initializes all list<>-type auto properties in this class
     $modelTemplate += @"
-    
     public $($tx.Name + $globalPrefix)()
     {
       $($initStmts -join "`r`n      ")
