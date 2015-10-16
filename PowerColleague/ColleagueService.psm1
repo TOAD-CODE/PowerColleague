@@ -1173,11 +1173,11 @@ namespace $($ctxModel.dataContractNamespace)
   
   # Go through each group of elements
   $firstGroup = $true
-  foreach($grp in $ctxModel.Groups)
+  foreach($grp in $ctxModel.Groups.Group)
   {
     # Only include group if at least one element is inbound or outbound
     $isGroupOutbound = $isGroupInbound = $false
-    foreach($mbr in $grp.GroupMembers)
+    foreach($mbr in $grp.GroupMembers.GroupMember)
     {
       $isGroupInbound = Assert-IsInbound $mbr.direction
       $isGroupOutbound = Assert-IsOutbound $mbr.direction
@@ -1193,11 +1193,12 @@ namespace $($ctxModel.dataContractNamespace)
 
       $modelTemplate += @"
   [DataContract]
-  public class $($grp.Name)
+  public partial class $($grp.Name)
   {
+  
 "@
       $firstGroupMember =  $isController = $true
-      foreach($mbr in $grp.GroupMembers)
+      foreach($mbr in $grp.GroupMembers.GroupMember)
       {
         # Only include members if it's inbound and/or outbound
         $elementIsInbound = Assert-IsInbound $mbr.direction
@@ -1225,10 +1226,10 @@ namespace $($ctxModel.dataContractNamespace)
           }
 
           if ($mbr.isRequired) {
-            $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
+            $modelTemplate += "  [DataMember(IsRequired = true)]`r`n"
           }
           else {
-            $modelTemplate += "    [DataMember]`r`n"
+            $modelTemplate += "  [DataMember]`r`n"
           }
 
           if ($mbr.displayFormat) {
@@ -1247,18 +1248,18 @@ namespace $($ctxModel.dataContractNamespace)
           }
 
           $datatelBooleanAttr = Get-DatatelBooleanAttribute $mbr.dataType
-          $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($mbr.LegacyName)`"$datatelBooleanAttr$sctrqParameters]`r`n"
+          $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($mbr.LegacyName)`"$datatelBooleanAttr$sctrqParameters)]`r`n"
 
           $clrType = ConvertTo-ClrType $mbr.dataType
           
           if ($clrType -match "string|bool10" ) {
-            $modelTemplate += "    public $clrType $($mbr.Name) { get; set; }`r`n"
+            $modelTemplate += "    public $clrType $($mbr.Name) { get; set; }`r`n`r`n"
           }
           elseif ($clrType -match "uri") {
-            $modelTemplate += "    public Uri $($mbr.Name) { get; set; }`r`n"
+            $modelTemplate += "    public Uri $($mbr.Name) { get; set; }`r`n`r`n"
           }
           else {
-            $modelTemplate += "    public Nullable<$clrType> $($mbr.Name) { get; set; }`r`n"
+            $modelTemplate += "    public Nullable<$clrType> $($mbr.Name) { get; set; }`r`n`r`n"
           }
 
           $isController = $false
@@ -1401,46 +1402,47 @@ namespace $($ctxModel.dataContractNamespace)
 
     foreach($grpref in $tx.contents.groupReference)
     {
-      $grp = $grpref.Group
+      $grp = $ctxModel.groups.Group | ? {$_.name -eq $grpref.name}
       # only include group if at least one element is inbound our outbound or required
 
       $isGroupRequired = $isGroupOutbound = $isGroupInbound = $false
-      foreach($mbr in $grp.GroupMembers)
+      foreach($mbr in $grp.GroupMembers.GroupMember)
       {
         $isGroupInbound = Assert-IsInbound $mbr.Direction
         $isGroupOutBound = Assert-IsOutbound $mbr.direction
 
         $isGroupRequired = $mbr.isRequired
+      }
 
-        # Only include group if it is inbound and/or outbound 
-        if (($isGroupInbound -and $isGlobalInbound) -or ($isGroupOutbound -and $isGlobalOutbound)){
-          if ( -not $firstContent) { # again! 
-          }
-          $firstContent = false
-          # if group is required, flag it
-          if ($isGroupRequired){
-            $modelTemplate += "   [DataMember(IsRequired = true)]`r`n"
-          }
-          else {
-            $modelTemplate += "   [DataMember(IsRequired = true)]`r`n"
-          }
-          $sctrqParameters = [string]::Empty
+      # Only include group if it is inbound and/or outbound 
+      if (($isGroupInbound -and $isGlobalInbound) -or ($isGroupOutbound -and $isGlobalOutbound)){
+        if ( -not $firstContent) { # again! 
+        }
+        $firstContent = $false
+        # if group is required, flag it
+        if ($isGroupRequired){
+          $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
+        }
+        else {
+          $modelTemplate += "    [DataMember]`r`n"
+        }
+        $sctrqParameters = [string]::Empty
 
-          if ($isGroupInbound -and $isGlobalInbound){
-            sctrqParameters += ", InBoundData = true"
-          }
+        if ($isGroupInbound -and $isGlobalInbound){
+          $sctrqParameters += ", InBoundData = true"
+        }
 
-          if ($isGroupOutbound -and $isGlobalOutbound){
-            sctrqParameters += ", OutBoundData = true"
-          }
+        if ($isGroupOutbound -and $isGlobalOutbound){
+          $sctrqParameters += ", OutBoundData = true"
+        }
 
-          $modelTemplate += @"
+        $modelTemplate += @"
     [SctrqDataMember(AppServerName = "$($grpref.legacyName)"$(Get-DatatelBooleanAttribute $grpref.dataType -LeadingComma)$sctrqParameters)]
     public List<$($grp.Name)> $($grpref.Name) { get; set; }
 
+
 "@
-          $initStmts += "$($grpref.Name) = new List<$($grp.Name)>();"
-        }
+        $initStmts += "$($grpref.Name) = new List<$($grp.Name)>();"
       }
     }
     
