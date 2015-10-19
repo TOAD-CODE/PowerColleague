@@ -7,19 +7,19 @@ function Set-AppConfig{
 		)
 	
 	Add-Type -AssemblyName System.Configuration
-    [System.AppDomain]::CurrentDomain.SetData("APP_CONFIG_FILE", $AppConfigPath)
+  [System.AppDomain]::CurrentDomain.SetData("APP_CONFIG_FILE", $AppConfigPath)
 }
 
 function Set-ColleagueCreds {
-    param(
-        [string]
-        $username,
-        [string]
-        $password
-    )
-    
-    AddUpdateAppSettings "colleagueUserName" $username
-    AddUpdateAppSettings "colleagueUserPassword" $password
+  param(
+      [string]
+      $username,
+      [string]
+      $password
+  )
+  
+  AddUpdateAppSettings "colleagueUserName" $username
+  AddUpdateAppSettings "colleagueUserPassword" $password
 }
 
 function Set-AppSettings {
@@ -50,78 +50,78 @@ function Set-AppSettings {
 
 function Initialize-ColleagueService{
 
-    # The Colleague classes need the AppConfig Set
+  # The Colleague classes need the AppConfig Set
 
-    $defaultPath = "$PSScriptRoot\App.config"
-    $AppConfigPath -or ($AppConfigPath =  $defaultPath) > $null
+  $defaultPath = "$PSScriptRoot\App.config"
+  $AppConfigPath -or ($AppConfigPath =  $defaultPath) > $null
+  
+  Set-AppConfig $AppConfigPath
+  
+  $SDKVersion = [System.Configuration.ConfigurationManager]::AppSettings["sdkVersion"]
+  
+  $EllucianPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianDependenciesPath"]
+  $script:VSExtPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianVSExtDependenciesPath"]
     
-    Set-AppConfig $AppConfigPath
-    
-    $SDKVersion = [System.Configuration.ConfigurationManager]::AppSettings["sdkVersion"]
-    
-    $EllucianPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianDependenciesPath"]
-    $script:VSExtPath = [System.Configuration.ConfigurationManager]::AppSettings["ellucianVSExtDependenciesPath"]
-	    
-    $script:ColleagueUserName = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserName"]
-    $script:ColleagueUserPassword = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserPassword"]
-    
-    Add-Type -Path "$EllucianPath\Ellucian.Colleague.Configuration.dll"
-    Add-Type -Path "$EllucianPath\Ellucian.Colleague.Property.dll"
-    Add-Type -Path "$EllucianPath\Ellucian.Dmi.Client.dll"
-    Add-Type -Path "$EllucianPath\Ellucian.Data.Colleague.dll"
-    Add-Type -Path "$EllucianPath\slf4net.dll" # This will give an error if it's not included
-    Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
-    
-    Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
-    Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
-    
-    # The below is required for Console based applications
-    $newObj = New-Object System.Object
-    [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.Initialize()
-    [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.StoreParameter([Ellucian.Colleague.Property.Properties.Resources]::ValidApplicationServerSettingsFlag, $newObj, [DateTime]::MaxValue )
+  $script:ColleagueUserName = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserName"]
+  $script:ColleagueUserPassword = [System.Configuration.ConfigurationManager]::AppSettings["colleagueUserPassword"]
+  
+  Add-Type -Path "$EllucianPath\Ellucian.Colleague.Configuration.dll"
+  Add-Type -Path "$EllucianPath\Ellucian.Colleague.Property.dll"
+  Add-Type -Path "$EllucianPath\Ellucian.Dmi.Client.dll"
+  Add-Type -Path "$EllucianPath\Ellucian.Data.Colleague.dll"
+  Add-Type -Path "$EllucianPath\slf4net.dll" # This will give an error if it's not included
+  Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
+  
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
+  Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
+  
+  # The below is required for Console based applications
+  $newObj = New-Object System.Object
+  [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.Initialize()
+  [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.StoreParameter([Ellucian.Colleague.Property.Properties.Resources]::ValidApplicationServerSettingsFlag, $newObj, [DateTime]::MaxValue )
 
-    # These Types are what is expected to be passed when compiling the Entities in powershell
-    $script:TypeAssem = (
-      'System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
-      'System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
-      'System.ComponentModel.DataAnnotations, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35',
-      'mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
-      'System.Runtime.Serialization, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
-      'Ellucian.Colleague.Configuration, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-      'Ellucian.Colleague.Property, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-      'Ellucian.Data.Colleague, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-      'Ellucian.Dmi.Client, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-      'Ellucian.Dmi.Runtime, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb'
-    )
+  # These Types are what is expected to be passed when compiling the Entities in powershell
+  $script:TypeAssem = (
+    'System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+    'System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+    'System.ComponentModel.DataAnnotations, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35',
+    'mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+    'System.Runtime.Serialization, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
+    'Ellucian.Colleague.Configuration, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
+    'Ellucian.Colleague.Property, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
+    'Ellucian.Data.Colleague, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
+    'Ellucian.Dmi.Client, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
+    'Ellucian.Dmi.Runtime, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb'
+  )
 }
 #endregion ModuleSettings
 
 #region SessionInfo
 
 function Get-SessionTimeout {
-    $script:timeoutDate
+  $script:timeoutDate
 }
 
 function Set-SessionTimeout {
-    param ([int] $timeout)
-    
-    $script:timeoutDate = (Get-Date).AddSeconds($timeout - 5)
+  param ([int] $timeout)
+  
+  $script:timeoutDate = (Get-Date).AddSeconds($timeout - 5)
 }
 
 function Open-DmiSession {        
-    $loginReq = New-Object Ellucian.Dmi.Client.StandardLoginRequest
-    $login = New-Object Ellucian.Data.Colleague.Repositories.ColleagueLogin
-    
-    $loginReq.UserID = $script:ColleagueUserName
-    $loginReq.Password = $script:ColleagueUserPassword
-    
-    $session = $login.StandardColleagueLogin($loginReq)
-    
-    if(!$session.SecurityToken){
-        throw [System.ArgumentNullException] $session.Errors
-    }
-    Set-SessionTimeout $session.TokenTimeout
-    $session
+  $loginReq = New-Object Ellucian.Dmi.Client.StandardLoginRequest
+  $login = New-Object Ellucian.Data.Colleague.Repositories.ColleagueLogin
+  
+  $loginReq.UserID = $script:ColleagueUserName
+  $loginReq.Password = $script:ColleagueUserPassword
+  
+  $session = $login.StandardColleagueLogin($loginReq)
+  
+  if(!$session.SecurityToken){
+      throw [System.ArgumentNullException] $session.Errors
+  }
+  Set-SessionTimeout $session.TokenTimeout
+  $session
 }
 
 function Close-DmiSession {
@@ -136,96 +136,23 @@ function Close-DmiSession {
 }
 
 function Get-ColleagueSession{
-    if((Get-Date) -ge (Get-SessionTimeout) ){
-        if($script:session){$response = Close-DmiSession $script:session}
-        $script:session = Open-DmiSession 
-    }
-    
-    $script:session
+  if((Get-Date) -ge (Get-SessionTimeout) ){
+      if($script:session){$response = Close-DmiSession $script:session}
+      $script:session = Open-DmiSession 
+  }
+  
+  $script:session
 }
 
 #endregion SessionInfo
 
 #region ColleagueInfo
 function Get-AllApplications{
-$AllApps = @"
-//------------------------------------------------------------------------------
-// <auto-generated>
-//     This code was generated by the DSL/T4 Generator - Version 1.1
-//     Last generated on 9/14/2015 11:04:52 AM by user roger.garrison
-//
-//     Type: CTX
-//     Transaction ID: GET.ALL.APPLS
-//     Application: UT
-//     Environment: Development_rt
-//
-//     Changes to this file may cause incorrect behavior and will be lost if
-//     the code is regenerated.
-// </auto-generated>
-//------------------------------------------------------------------------------
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Web;
-using System.Runtime.Serialization;
-using System.CodeDom.Compiler;
-using Ellucian.Dmi.Runtime;
-
-namespace ColleagueSDK.DataContracts
-{
-	[DataContract]
-	public class Applications
-	{
-		[DataMember]
-		[SctrqDataMember(AppServerName = "TV.APPLICATIONS", OutBoundData = true)]
-		public string Application { get; set; }
-	}
-
-	[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
-	[DataContract]
-	[ColleagueDataContract(ColleagueId = "GET.ALL.APPLS", GeneratedDateTime = "9/14/2015 11:04:52 AM", User = "roger.garrison")]
-	[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
-	public class GetAllApplsRequest
-	{
-		/// <summary>
-		/// Version
-		/// </summary>
-		[DataMember]
-		public int _AppServerVersion { get; set; }
-
-
-		public GetAllApplsRequest()
-		{	
-		}
-	}
-
-	[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
-	[DataContract]
-	[ColleagueDataContract(ColleagueId = "GET.ALL.APPLS", GeneratedDateTime = "9/14/2015 11:04:52 AM", User = "roger.garrison")]
-	[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
-	public class GetAllApplsResponse
-	{
-		/// <summary>
-		/// Version
-		/// </summary>
-		[DataMember]
-		public int _AppServerVersion { get; set; }
-
-		[DataMember]
-		[SctrqDataMember(AppServerName = "Grp:TV.APPLICATIONS", OutBoundData = true)]
-		public List<Applications> Applications { get; set; }
-
-		public GetAllApplsResponse()
-		{	
-			Applications = new List<Applications>();
-		}
-	}
-}
-"@
-
-  Add-Type -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllApps -Language CSharp
+  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.GetAllApplsRequest").Type){
+    $AllAppls = Get-CtxModel UT GET.ALL.APPLS
+    Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllAppls -Language CSharp 
+  }
 
   $request = New-Object ColleagueSDK.DataContracts.GetAllApplsRequest
   $typeRequest = $request.getType()
@@ -400,80 +327,84 @@ function Get-ApplicationEntities {
   )
 
   BEGIN {
-    #region AllEntities
-    $AllEntities = @"
-//------------------------------------------------------------------------------
-// <auto-generated>
-//     This code was generated by the DSL/T4 Generator - Version 1.1
-//
-//     Type: CTX
-//     Transaction ID: GET.APPL.ENTITIES
-//     Application: UT
-//     Environment: 
-//
-//     Changes to this file may cause incorrect behavior and will be lost if
-//     the code is regenerated.
-// </auto-generated>
-//------------------------------------------------------------------------------
+    ##region AllEntities
+    #$AllEntities = @"
+#//------------------------------------------------------------------------------
+#// <auto-generated>
+#//     This code was generated by the DSL/T4 Generator - Version 1.1
+#//
+#//     Type: CTX
+#//     Transaction ID: GET.APPL.ENTITIES
+#//     Application: UT
+#//     Environment: 
+#//
+#//     Changes to this file may cause incorrect behavior and will be lost if
+#//     the code is regenerated.
+#// </auto-generated>
+#//------------------------------------------------------------------------------
 
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Web;
-using System.Runtime.Serialization;
-using System.CodeDom.Compiler;
-using Ellucian.Dmi.Runtime;
+#using System;
+#using System.Collections.Generic;
+#using System.ComponentModel.DataAnnotations;
+#using System.Linq;
+#using System.Web;
+#using System.Runtime.Serialization;
+#using System.CodeDom.Compiler;
+#using Ellucian.Dmi.Runtime;
 
-namespace ColleagueSDK.DataContracts
-{
-	[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
-	[DataContract]
-	[ColleagueDataContract(ColleagueId = "GET.APPL.ENTITIES", GeneratedDateTime = "", User = "")]
-	[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
-	public class GetApplEntitiesRequest
-	{
-		/// <summary>
-		/// Version
-		/// </summary>
-		[DataMember]
-		public int _AppServerVersion { get; set; }
+#namespace ColleagueSDK.DataContracts
+#{
+	#[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
+	#[DataContract]
+	#[ColleagueDataContract(ColleagueId = "GET.APPL.ENTITIES", GeneratedDateTime = "", User = "")]
+	#[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
+	#public class GetApplEntitiesRequest
+	#{
+		#/// <summary>
+		#/// Version
+		#/// </summary>
+		#[DataMember]
+		#public int _AppServerVersion { get; set; }
 
-		[DataMember(IsRequired = true)]
-		[SctrqDataMember(AppServerName = "TV.APPLICATION", InBoundData = true)]        
-		public string TvApplication { get; set; }
+		#[DataMember(IsRequired = true)]
+		#[SctrqDataMember(AppServerName = "TV.APPLICATION", InBoundData = true)]        
+		#public string TvApplication { get; set; }
 
-		public GetApplEntitiesRequest()
-		{	
-		}
-	}
+		#public GetApplEntitiesRequest()
+		#{	
+		#}
+	#}
 
-	[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
-	[DataContract]
-	[ColleagueDataContract(ColleagueId = "GET.APPL.ENTITIES", GeneratedDateTime = "", User = "")]
-	[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
-	public class GetApplEntitiesResponse
-	{
-		/// <summary>
-		/// Version
-		/// </summary>
-		[DataMember]
-		public int _AppServerVersion { get; set; }
+	#[GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
+	#[DataContract]
+	#[ColleagueDataContract(ColleagueId = "GET.APPL.ENTITIES", GeneratedDateTime = "", User = "")]
+	#[SctrqDataContract(Application = "UT", DataContractVersion = 1)]
+	#public class GetApplEntitiesResponse
+	#{
+		#/// <summary>
+		#/// Version
+		#/// </summary>
+		#[DataMember]
+		#public int _AppServerVersion { get; set; }
 
-		[DataMember]
-		[SctrqDataMember(AppServerName = "TV.ENTITIES", OutBoundData = true)]        
-		public List<string> TvEntities { get; set; }
+		#[DataMember]
+		#[SctrqDataMember(AppServerName = "TV.ENTITIES", OutBoundData = true)]        
+		#public List<string> TvEntities { get; set; }
 
-		public GetApplEntitiesResponse()
-		{	
-			TvEntities = new List<string>();
-		}
-	}
-}
-"@
-    #endregion AllEntities
+		#public GetApplEntitiesResponse()
+		#{	
+			#TvEntities = new List<string>();
+		#}
+	#}
+#}
+#"@
+    ##endregion AllEntities
 
-    Add-Type -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllEntities -Language CSharp
+    #Add-Type -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllEntities -Language CSharp
+    if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.GetApplEntitiesRequest").Type){
+      $AllEntities= Get-CtxModel UT GET.APPL.ENTITIES
+      Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $AllEntities -Language CSharp 
+    }
   }
   
   PROCESS {
