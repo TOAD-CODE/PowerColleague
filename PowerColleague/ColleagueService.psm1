@@ -239,7 +239,7 @@ function Get-CtxModel {
 function Invoke-CTX{
   param($typeRequest, $typeResponse, $request)
   $trans = Get-TransactionInvoker
-  .\Invoke-GenericMethod.ps1 $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
+  &"$PSScriptRoot\Invoke-GenericMethod.ps1" $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
 }
 
 function Get-TransactionInvoker {
@@ -279,6 +279,9 @@ function Read-TableInfo{
     [Parameter(Mandatory=$true, Position=1)]
     [string]
     $TableName,
+    [Parameter(Position=2)]
+    [string[]]
+    $Fields,
     [Parameter(ParameterSetName="p1", Position=0)]
     [string]
     $Filter = "",
@@ -292,27 +295,34 @@ function Read-TableInfo{
     $ReplaceTextVMs
   )
   
-  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
+  $tableCamel = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($TableName)
+  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$tableCamel").Type){
     $app = Get-AppsForEntity $TableName
-    $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
+    $testsource = if($Fields){
+      Get-EntityModel $app $TableName.ToUpper() -FieldNames $Fields
+    }
+    else {
+      Get-EntityModel $app $TableName.ToUpper() -GetDetail 
+    }
+    
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
   }
   $dataReader = Get-DataReader
 
   $invalidRecords = New-Object 'System.Collections.Generic.Dictionary[string,string]'
 
-  $type = (New-Object "ColleagueSDK.DataContracts.$TableName").getType()
+  $type = (New-Object "ColleagueSDK.DataContracts.$TableCamel").getType()
   switch ($PSCmdlet.ParameterSetName)
   {
     "p2" {
-      $returned = .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
+      $returned = &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
     }
 
     #"p3" {
     #}
 
     default {
-      .\Invoke-GenericMethod.ps1 $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($Filter, [bool]$ReplaceTextVMs)
+      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($Filter, [bool]$ReplaceTextVMs)
     }
   }
 
@@ -370,8 +380,8 @@ function Get-EntityModel {
 
 switch ($PSCmdlet.ParameterSetName)
   {
-    "p2" { $fileDetails = New-FileDetails $App $FileName -DetailMode }
-    default{$fileDetails = New-FileDetails $App $FileName -FieldNames $FieldNames}
+    "p2" { $fileDetails = New-FileDetails $App.ToUpper() $FileName.ToUpper() -DetailMode }
+    default{$fileDetails = New-FileDetails $App.ToUpper() $FileName.ToUpper() -FieldNames $FieldNames}
   }
   Write-Verbose "Create Entity Generator from New-EntityGeneratorInput"
   $entityDataModelGenerator = New-EntityGeneratorInput $fileDetails 
@@ -825,7 +835,7 @@ namespace $($fileModel.dataContractNamespace)
       $($assoc.Name)EntityAssociation = new List<$($fileModel.entities.legacyFile.name)$($assoc.name)>();
 "@
         
-        $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController)[0].Name
+        $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController).Name
         if(!$controllerName){ $controllerName = $assoc.EntityassociationMembers.EntityAssociationMember[0].Name}
 
         $modeltemplate += @"
@@ -982,7 +992,7 @@ function New-CtxTransform {
     param ([string] $type)
 
     switch -regex ($type) {
-        "^(?:(?:Multiline)Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
+        "^(?:(?:Multiline)?Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
         "BooleanYN" { "bool" }
         "Boolean10" { "bool10" }
         "Uri" { "uri" }
