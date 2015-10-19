@@ -48,11 +48,13 @@ function Set-AppSettings {
   }
 }
 
-function Initialize-ColleagueService{
+function Initialize-ColleagueService {
 
   # The Colleague classes need the AppConfig Set
 
-  $defaultPath = "$PSScriptRoot\App.config"
+  $defaultVersion = Get-Content "$PSScriptRoot\defaultVersion"
+
+  $defaultPath = "$PSScriptRoot\v$defaultVersion\App.config"
   $AppConfigPath -or ($AppConfigPath =  $defaultPath) > $null
   
   Set-AppConfig $AppConfigPath
@@ -72,13 +74,17 @@ function Initialize-ColleagueService{
   Add-Type -Path "$EllucianPath\slf4net.dll" # This will give an error if it's not included
   Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
   
+  # Load the Microsoft.VisualStudio.Shell that is required for the version
+  Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.dll"
+  Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.Interop.dll"
+
   Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
   Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
   
   # The below is required for Console based applications
   $newObj = New-Object System.Object
   [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.Initialize()
-  [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.StoreParameter([Ellucian.Colleague.Property.Properties.Resources]::ValidApplicationServerSettingsFlag, $newObj, [DateTime]::MaxValue )
+  [Ellucian.Colleague.Configuration.ApplicationServerConfigurationManager]::Instance.StoreParameter([Ellucian.Colleague.Property.Properties.Resources]::ValidApplicationServerSettingsFlag, $newObj, [DateTime]::MaxValue)
 
   # These Types are what is expected to be passed when compiling the Entities in powershell
   $script:TypeAssem = (
@@ -87,11 +93,11 @@ function Initialize-ColleagueService{
     'System.ComponentModel.DataAnnotations, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35',
     'mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
     'System.Runtime.Serialization, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089',
-    'Ellucian.Colleague.Configuration, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-    'Ellucian.Colleague.Property, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-    'Ellucian.Data.Colleague, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-    'Ellucian.Dmi.Client, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb',
-    'Ellucian.Dmi.Runtime, Version=1.6.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb'
+    "Ellucian.Colleague.Configuration, Version=$SDKVersion.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb",
+    "Ellucian.Colleague.Property, Version=$SDKVersion.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb",
+    "Ellucian.Data.Colleague, Version=$SDKVersion.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb",
+    "Ellucian.Dmi.Client, Version=$SDKVersion.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb",
+    "Ellucian.Dmi.Runtime, Version=$SDKVersion.0.0, Culture=neutral, PublicKeyToken=55c547a3498c89fb"
   )
 }
 #endregion ModuleSettings
@@ -315,7 +321,7 @@ function Read-TableInfo{
   switch ($PSCmdlet.ParameterSetName)
   {
     "p2" {
-      $returned = &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
+      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
     }
 
     #"p3" {

@@ -82,4 +82,4 @@ foreach($method in $type.GetMethods())
 }
 
 ## Return an error if we couldn’t find that method
-throw "Could not find method" + $methodName
+throw "Could not find method $methodName"
