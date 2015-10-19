@@ -6,7 +6,7 @@ function Set-AppConfig{
 		$AppConfigPath
 		)
 	
-	Add-Type -AssemblyName System.Configuration
+  Add-Type -AssemblyName System.Configuration
   [System.AppDomain]::CurrentDomain.SetData("APP_CONFIG_FILE", $AppConfigPath)
 }
 
@@ -75,8 +75,8 @@ function Initialize-ColleagueService {
   Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
   
   # Load the Microsoft.VisualStudio.Shell that is required for the version
-  Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.dll"
-  Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.Interop.dll"
+  #Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.dll"
+  #Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.Interop.dll"
 
   Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.DataModels.dll"
   Add-Type -Path "$($script:VSExtPath)\Ellucian.WebServices.VS.Ext.dll"
