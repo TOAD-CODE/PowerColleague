@@ -982,7 +982,7 @@ function New-CtxTransform {
     param ([string] $type)
 
     switch -regex ($type) {
-        "^(?:(?:Multiline)Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
+        "^(?:(?:Multiline)?Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
         "BooleanYN" { "bool" }
         "Boolean10" { "bool10" }
         "Uri" { "uri" }
