@@ -292,7 +292,8 @@ function Read-TableInfo{
     $ReplaceTextVMs
   )
   
-  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$TableName").Type){
+  $tableCamel = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($TableName)
+  if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$tableCamel").Type){
     $app = Get-AppsForEntity $TableName
     $testsource = Get-EntityModel $app $TableName.ToUpper() -GetDetail #-FieldNames FIRST.NAME, LAST.NAME, Middle.NAME
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
@@ -301,7 +302,7 @@ function Read-TableInfo{
 
   $invalidRecords = New-Object 'System.Collections.Generic.Dictionary[string,string]'
 
-  $type = (New-Object "ColleagueSDK.DataContracts.$TableName").getType()
+  $type = (New-Object "ColleagueSDK.DataContracts.$TableCamel").getType()
   switch ($PSCmdlet.ParameterSetName)
   {
     "p2" {
@@ -825,7 +826,7 @@ namespace $($fileModel.dataContractNamespace)
       $($assoc.Name)EntityAssociation = new List<$($fileModel.entities.legacyFile.name)$($assoc.name)>();
 "@
         
-        $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController)[0].Name
+        $controllerName = ($assoc.EntityAssociationMembers.EntityAssociationMember | Where IsController).Name
         if(!$controllerName){ $controllerName = $assoc.EntityassociationMembers.EntityAssociationMember[0].Name}
 
         $modeltemplate += @"
