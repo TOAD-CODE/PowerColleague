@@ -74,7 +74,7 @@ function Initialize-ColleagueService {
   Add-Type -Path "$EllucianPath\slf4net.dll" # This will give an error if it's not included
   Add-Type -Path "$EllucianPath\Ellucian.WebServices.Core.Config.dll"
   
-  # Load the Microsoft.VisualStudio.Shell that is required for the version
+  ## Load the Microsoft.VisualStudio.Shell that is required for the version
   #Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.dll"
   #Add-Type -Path "$PSScriptRoot\v$SDKVersion\Microsoft.VisualStudio.Shell.Interop.dll"
 
