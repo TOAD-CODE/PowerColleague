@@ -124,7 +124,8 @@ function Open-DmiSession {
   $session = $login.StandardColleagueLogin($loginReq)
   
   if(!$session.SecurityToken){
-      throw [System.ArgumentNullException] $session.Errors
+    $errs = $session.Errors | % {"Error Code: $($_.ErrorCode)`r`nCategory: $($_.ErrorCategory)`r`nError Message: $($_.ErrorMessageText)" }
+    throw $errs -join "`r`n`r`n"
   }
   Set-SessionTimeout $session.TokenTimeout
   $session
