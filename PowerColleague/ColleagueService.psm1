@@ -296,8 +296,8 @@ function Read-TableInfo{
     [string[]]
     $FilterKeys,
     #[Parameter(ParameterSetName="p3", Position=0)]
-    #[string]
-    #$PhysicalFileName,
+    [string]
+    $PhysicalFileName,
     [switch]
     $ReplaceTextVMs
   )
@@ -305,6 +305,7 @@ function Read-TableInfo{
   $tableCamel = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::ConvertToCamelCase($TableName)
   if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$tableCamel").Type){
     $app = Get-AppsForEntity $TableName
+    $app = if($App -and ($App.Count -gt 1)) {$App[0]} else{$App}
     $testsource = if($Fields){
       Get-EntityModel $app $TableName.ToUpper() -FieldNames $Fields
     }
@@ -312,7 +313,7 @@ function Read-TableInfo{
       Get-EntityModel $app $TableName.ToUpper() -GetDetail 
     }
     
-    Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
+    Add-Type -ErrorAction Stop -ReferencedAssemblies $script:TypeAssem -TypeDefinition $testSource -Language CSharp 
   }
   $dataReader = Get-DataReader
 
@@ -322,14 +323,20 @@ function Read-TableInfo{
   switch ($PSCmdlet.ParameterSetName)
   {
     "p2" {
-      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($FilterKeys, [bool]$ReplaceTextVMs)
+      $params = @()
+      if($PhysicalFileName) { $params += $PhysicalFileName}
+      $params +=  @($FilterKeys, [bool]$ReplaceTextVMs)
+      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters $params
     }
 
     #"p3" {
     #}
 
     default {
-      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters @($Filter, [bool]$ReplaceTextVMs)
+      $params = @()
+      if($PhysicalFileName) { $params += $PhysicalFileName}
+      $params +=  @($Filter, [bool]$ReplaceTextVMs)
+      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $dataReader -methodName "BulkReadRecord" -typeParameters $type -methodParameters $params
     }
   }
 
@@ -666,11 +673,13 @@ function New-FileDetails {
     "p3" {
         foreach($FileName in $FileNames)
         {
-            $returnVal += [Ellucian.WebServices.VS.Ext.VSExtUtilities]::BuildFileDetails($colleagueEnv, $app, $filename, $filename, ([Collections.Generic.List[String]]$FieldNames), $true)
+          $filename = $filename.ToUpper() -replace "APPL", "appl" 
+          $returnVal += [Ellucian.WebServices.VS.Ext.VSExtUtilities]::BuildFileDetails($colleagueEnv, $app, $filename, $filename, ([Collections.Generic.List[String]]$FieldNames), $true)
         }
     }
     default {
-        $returnVal = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::BuildFileDetails($colleagueEnv, $app, $filename, $filename, ([Collections.Generic.List[String]]$FieldNames), [bool]$DetailMode)
+      $filename = $filename.ToUpper() -replace "APPL", "appl" 
+      $returnVal = [Ellucian.WebServices.VS.Ext.VSExtUtilities]::BuildFileDetails($colleagueEnv, $app, $filename, $filename, ([Collections.Generic.List[String]]$FieldNames), [bool]$DetailMode)
     }
   }
   return $returnVal
