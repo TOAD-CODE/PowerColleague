@@ -18,8 +18,8 @@ function Set-ColleagueCreds {
       $password
   )
   
-  AddUpdateAppSettings "colleagueUserName" $username
-  AddUpdateAppSettings "colleagueUserPassword" $password
+  Set-AppSettings "colleagueUserName" $username
+  Set-AppSettings "colleagueUserPassword" $password
 }
 
 function Set-AppSettings {
@@ -188,6 +188,12 @@ function Get-ColleagueEnv {
   return $colleagueEnv
 }
 
+function Set-DataContract {
+  param([string] $dataContractModel, [string] $ClassName)
+    if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$ClassName").Type){
+    Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $dataContractModel -Language CSharp 
+  }
+}
 #region ColleagueCTX
 function Get-ApplicationCtxs {
   [CmdletBinding()]
@@ -599,7 +605,7 @@ namespace Ellucian.WebServices.VS.Contract.Generator.Entity
           {
             [Int32]::TryParse($current.DefaultDisplaySize, [ref] $num2)
           }
-          if (num2 -ge 19)
+          if ($num2 -ge 19)
           {
             $text += ";This transaction variable has a conversion type of `"MD0`", and its size exceeds the limit of 18 digits for .Net";
           }
@@ -1009,8 +1015,9 @@ function New-CtxTransform {
 
     switch -regex ($type) {
         "^(?:(?:Multiline)?Text|\s*)$" { "string" } # add empty to map to string, because I think it fits better
-        "BooleanYN" { "bool" }
-        "Boolean10" { "bool10" }
+        #"BooleanYN" { "bool" }
+        #"Boolean10" { "bool10" }
+        "Boolean" { "bool" }
         "Uri" { "uri" }
         "Date|Time" { "DateTime" }
         "Integer" { "int" }
@@ -1078,7 +1085,7 @@ namespace $($ctxModel.dataContractNamespace)
   [DataContract]
   public partial class $($grp.Name)
   {
-  
+
 "@
       $firstGroupMember =  $isController = $true
       foreach($mbr in $grp.GroupMembers.GroupMember)
@@ -1109,14 +1116,14 @@ namespace $($ctxModel.dataContractNamespace)
           }
 
           if ($mbr.isRequired) {
-            $modelTemplate += "  [DataMember(IsRequired = true)]`r`n"
+            $modelTemplate += "    [DataMember(IsRequired = true)]`r`n"
           }
           else {
-            $modelTemplate += "  [DataMember]`r`n"
+            $modelTemplate += "    [DataMember]`r`n"
           }
 
           if ($mbr.displayFormat) {
-            $modelTemplate += "    [DisplayFormat(DataFormatString = $($mbr.displayFormat))]`r`n"
+            $modelTemplate += "    [DisplayFormat(DataFormatString = `"$($mbr.displayFormat)`")]`r`n"
           }
 
           $sctrqParameters = [String]::Empty
@@ -1130,12 +1137,12 @@ namespace $($ctxModel.dataContractNamespace)
             $sctrqParameters += ", OutBoundData = true"
           }
 
-          $datatelBooleanAttr = Get-DatatelBooleanAttribute $mbr.dataType
+          $datatelBooleanAttr = Get-DatatelBooleanAttribute $mbr.dataType -LeadingComma
           $modelTemplate += "    [SctrqDataMember(AppServerName = `"$($mbr.LegacyName)`"$datatelBooleanAttr$sctrqParameters)]`r`n"
 
           $clrType = ConvertTo-ClrType $mbr.dataType
           
-          if ($clrType -match "string|bool10" ) {
+          if ($clrType -match "string|bool" ) {
             $modelTemplate += "    public $clrType $($mbr.Name) { get; set; }`r`n`r`n"
           }
           elseif ($clrType -match "uri") {
@@ -1184,6 +1191,7 @@ namespace $($ctxModel.dataContractNamespace)
     if($tx.isAnonymous) { $anonymous += ", PublicTransaction = true"}
 
     $modelTemplate += @"
+    
   [GeneratedCodeAttribute("Colleague Data Contract Generator", "1.1")]
   [DataContract]
   [ColleagueDataContract(ColleagueId = "$($tx.colleagueId)", GeneratedDateTime = "$($ctxModel.dateTime)", User = "$($ctxModel.userName)")]
@@ -1226,7 +1234,7 @@ namespace $($ctxModel.dataContractNamespace)
         }
 
         if ($fld.displayFormat) {
-          $modelTemplate += "   [DisplayFormat(DataFormatString = `"$($fld.displayFormat)`")]`r`n"
+          $modelTemplate += "    [DisplayFormat(DataFormatString = `"$($fld.displayFormat)`")]`r`n"
         }
 
         $sctrqParameters = [String]::Empty
@@ -1253,7 +1261,7 @@ namespace $($ctxModel.dataContractNamespace)
             $modelTemplate += "    public string $($fld.Name) { get; set; }`r`n`r`n"
           }
         }
-        elseif ($clrType -match "bool10") {
+        elseif ($clrType -match "bool") {
           if ($fld.isList) {
             $modelTemplate += "    public List<bool> $($fld.Name) { get; set; }`r`n`r`n"
             $initStmts += "$($fld.Name) = new List<bool>();"
@@ -1291,10 +1299,10 @@ namespace $($ctxModel.dataContractNamespace)
       $isGroupRequired = $isGroupOutbound = $isGroupInbound = $false
       foreach($mbr in $grp.GroupMembers.GroupMember)
       {
-        $isGroupInbound = Assert-IsInbound $mbr.Direction
-        $isGroupOutBound = Assert-IsOutbound $mbr.direction
+        $isGroupInbound = $isGroupInbound -or (Assert-IsInbound $mbr.Direction)
+        $isGroupOutBound = $isGroupOutBound -or (Assert-IsOutbound $mbr.direction)
 
-        $isGroupRequired = $mbr.isRequired
+        $isGroupRequired = $isGroupRequired -or $mbr.isRequired
       }
 
       # Only include group if it is inbound and/or outbound 
