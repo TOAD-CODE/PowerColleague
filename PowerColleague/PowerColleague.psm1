@@ -1,5 +1,18 @@
 #region ModuleSettings
 function Set-AppConfig{
+  <#
+  .SYNOPSIS
+    Sets the Application configuration
+  .DESCRIPTION
+    Adds the System.Configuration Assembly to the current session to be able to pull the information from the Application Config.
+    Uses System.AppDomain to set the app config for the current domain
+  .PARAMETER AppConfigPath
+    $AppConfigPath is the full path to the application config.
+  .EXAMPLE
+    Set-AppConfig .\App.config
+  .NOTES
+    It is recommened to use one of the default App.configs that come with this module
+  #>
 	param(
 		[Parameter(Mandatory=$true, Position=1)]
 		[string]
@@ -11,6 +24,20 @@ function Set-AppConfig{
 }
 
 function Set-ColleagueCreds {
+  <#
+  .SYNOPSIS
+    Sets the Colleague Credentials in the Application Config
+  .DESCRIPTION
+    This module assumes that the Colleague Username and Password are in the App config file
+  .PARAMETER username
+    Username to login to Colleague 
+  .PARAMETER password
+    Password to login to Colleague 
+  .EXAMPLE
+    Set-ColleagueCreds User Super_S3cr3t_P@ssw0rd
+  .NOTES
+    After the credentials are set, this function calls on Initialize-ColleagueService to re-initialize the information
+  #>
   param(
       [string]
       $username,
@@ -20,9 +47,23 @@ function Set-ColleagueCreds {
   
   Set-AppSettings "colleagueUserName" $username
   Set-AppSettings "colleagueUserPassword" $password
+  Initialize-ColleagueService
 }
 
 function Set-AppSettings {
+  <#
+  .SYNOPSIS
+    Sets or adds information to the AppSettings Section of the App config
+  .DESCRIPTION
+  .PARAMETER key
+    Key for the AppSettings information
+  .PARAMETER value
+    Value for the AppSettings information
+  .EXAMPLE
+    Set-AppSettings colleagueUserName username
+  .NOTES
+    You will want to re-initialize the module after making changes to the AppSettings to use the new information.
+  #>
   param(
     [string]
     $key,
@@ -49,6 +90,16 @@ function Set-AppSettings {
 }
 
 function Initialize-ColleagueService {
+  <#
+  .SYNOPSIS
+    Initializes this module
+  .DESCRIPTION
+    This sets the default values and calls on the correct functions to initialize this module
+  .EXAMPLE
+    Initialize-ColleagueService
+  .NOTES
+    You shouldn't have to call on this function manually as it is called when the module loads
+  #>
 
   # The Colleague classes need the AppConfig Set
 
@@ -154,7 +205,17 @@ function Get-ColleagueSession{
 #endregion SessionInfo
 
 #region ColleagueInfo
-function Get-AllApplications{
+function Get-AllApplications {
+  <#
+  .SYNOPSIS
+    Get all Colleague Applications
+  .DESCRIPTION
+    This calls on Colelague Transaction "GetAllApplsRequest" and returns all Colleague Applications (e.g. ST, CORE, UT, etc)
+  .EXAMPLE
+    Get-AllApplications
+  .NOTES
+    This is especially useful to pipe into "Get-ApplicationCtxs" and "Get-ApplicationEntities" to get all transactions or entities for each application respectively
+  #>
 
   if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.GetAllApplsRequest").Type){
     $AllAppls = Get-CtxModel UT GET.ALL.APPLS
@@ -169,6 +230,16 @@ function Get-AllApplications{
 }
 
 function Get-ColleagueEnv {
+  <#
+  .SYNOPSIS
+    Get the current Colleague SDK environment Settings
+  .DESCRIPTION
+    Returns the logged in username, Connection environment (i.e *_rt), Dmi App port and address, and current security token
+  .EXAMPLE
+    Get-ColleagueEnv
+  .NOTES
+    This is especially needed to generate the Data contracts and Transactions
+  #>
   [CmdletBinding()]
   param()
   
@@ -189,6 +260,19 @@ function Get-ColleagueEnv {
 }
 
 function Set-DataContract {
+  <#
+  .SYNOPSIS
+    Add a new Data Contract for reference in the current session
+  .DESCRIPTION
+    This module allows for the dynamic generation of Colleague Entities and Transactions. This function dynamically compiles that code for reference in the PowerShell session
+  .PARAMETER dataContractModel
+    The C# generated code of the Data Contract
+  .PARAMETER className
+    The class name of the Data Contract
+  .EXAMPLE
+    Set-DataContract $PersonEntityGeneratedCode Person
+  .NOTES
+  #>
   param([string] $dataContractModel, [string] $ClassName)
     if(-not ([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$ClassName").Type){
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $dataContractModel -Language CSharp 
@@ -196,6 +280,20 @@ function Set-DataContract {
 }
 #region ColleagueCTX
 function Get-ApplicationCtxs {
+  <#
+  .SYNOPSIS
+    Get all the Transactions for a given Colleague Application
+  .DESCRIPTION
+    This can accept multiple Application names and returns the Transactions for each App. It also accepts data from the pipeline.
+  .PARAMETER applicationNames
+    List of Colleague Application Names
+  .EXAMPLE
+    Get-ApplicationCtxs ST
+    Get-ApplicationCtxs ST, UT
+    Get-AllApplications | Get-ApplicationCtxs
+  .NOTES
+    This is particularly useful to pipe the data to "Where-Object" and filter for a particular transaction name
+  #>
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
@@ -230,6 +328,21 @@ function Get-ApplicationCtxs {
 }
 
 function Get-CtxModel {
+  <#
+  .SYNOPSIS
+    Build the generated generated c# code for a transaction
+  .DESCRIPTION
+    This builds the Data Contract similar to the Colleague .Net SDK Visual Studio Extension
+  .PARAMETER App
+    Application name of where the transaction lives in Colleague
+  .PARAMETER TransactionId
+    the name of the desired transaction
+  .EXAMPLE
+    Get-CtxModel UT GET.ALL.APPLS
+    Get-CtxModel UT GET.ALL.APPLS > GetAllAppls.cs
+  .NOTES
+    This is useful not just to generate the code for this module on-the-fly but to also generate the code and output it to a .cs file.
+  #>
   param(
     [string] $App,
     [string] $TransactionId
@@ -249,7 +362,28 @@ function Get-CtxModel {
   return New-CtxTransform $ctxDataModel
 }
 
-function Invoke-CTX{
+function Invoke-CTX {
+  <#
+  .SYNOPSIS
+    Call the Colleage transaction
+  .DESCRIPTION
+    This builds the Data Contract similar to the Colleague .Net SDK Visual Studio Extension
+  .PARAMETER typeRequest
+    the type value of the requesting class
+  .PARAMETER typeResponse
+    the type value of the responding class
+  .PARAMETER request
+    the request object to pass into the transaction
+  .EXAMPLE
+      $request = New-Object ColleagueSDK.DataContracts.GetApplEntitiesRequest
+      $request.TvApplication = $appname
+     
+      $typeRequest = $request.getType()
+      $typeResponse = (New-Object ColleagueSDK.DataContracts.GetApplEntitiesResponse).getType()
+      
+      $entities = Invoke-CTX $typeRequest $typeResponse $request
+  .NOTES
+  #>
   param($typeRequest, $typeResponse, $request)
   $trans = Get-TransactionInvoker
   &"$PSScriptRoot\Invoke-GenericMethod.ps1" $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
@@ -266,6 +400,18 @@ function Get-DataReader {
 }
 
 function Read-TableKeys{
+  <#
+  .SYNOPSIS
+    Read the keys from the Colleague Entity
+  .DESCRIPTION
+    This reads from a Colleague Entity that match the filter
+  .PARAMETER EntityTableName
+    Name of the Table to query
+  .PARAMETER Filter
+    The MIO query to filter the results
+  .EXAMPLE
+  .NOTES
+  #>
   param(
     [Parameter(Mandatory=$true, Position=1)]
     [string]
@@ -279,6 +425,16 @@ function Read-TableKeys{
 }
 
 function Get-AppsForEntity {
+  <#
+  .SYNOPSIS
+    Get all Colleague Applications that contain a given Entity
+  .DESCRIPTION
+    Need to remember which Applications have which table, this is the function for you 
+  .PARAMETER entity
+    Name of the Colleague Entity
+  .EXAMPLE
+  .NOTES
+  #>
   param(
     [string] $entity
   )
@@ -288,6 +444,28 @@ function Get-AppsForEntity {
 }
 
 function Read-TableInfo{
+  <#
+  .SYNOPSIS
+    Read the information from the Colleague Entity
+  .DESCRIPTION
+    This reads from a Colleague Entity that match the filter OR that match the RecordKeys. 
+    This can be called with specific field names which will limit the generated code to only those fields, or by default will generate a file with All fields for in the entity
+  .PARAMETER TableName
+    Name of the Table to query
+  .PARAMETER Fields
+    List of specific fields to limit the generated code by
+  .PARAMETER Filter
+    The MIO query to filter the results
+  .PARAMETER FilterKeys
+    Limit the query to only those with the matching Record keys
+  .PARAMETER PhysicalFileName
+    Name of the physical file of the entity
+  .PARAMETER ReplaceTextVMS
+    Name of the physical file of the entity
+  .EXAMPLE
+  .NOTES
+    For entities with multiple Applications associated, make sure to pass in the PhysicalFileName
+  #>
   param(
     [Parameter(Mandatory=$true, Position=1)]
     [string]
@@ -350,6 +528,20 @@ function Read-TableInfo{
 }
 
 function Get-ApplicationEntities {
+  <#
+  .SYNOPSIS
+    Get all the Entities for a given Colleague Application
+  .DESCRIPTION
+    This can accept multiple Application names and returns the Entities for each App. It also accepts data from the pipeline.
+  .PARAMETER applicationNames
+    List of Colleague Application Names
+  .EXAMPLE
+    Get-ApplicationEntities ST
+    Get-ApplicationEntities ST, UT
+    Get-AllApplications | Get-ApplicationEntities
+  .NOTES
+    This is particularly useful to pipe the data to "Where-Object" and filter for a particular entity name
+  #>
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
@@ -386,6 +578,25 @@ function Get-ApplicationEntities {
 }
 
 function Get-EntityModel {
+  <#
+  .SYNOPSIS
+    Build the generated c# code for a entity
+  .DESCRIPTION
+    This builds the Data Contract similar to the Colleague .Net SDK Visual Studio Extension
+  .PARAMETER App
+    Application name of where the entity lives in Colleague
+  .PARAMETER FileName
+    the name of the desired entity
+  .PARAMETER FieldNames
+    the names of the desired fields in the entity
+  .PARAMETER GetDetail
+    Switch that specifies to get all fields in the entity
+  .EXAMPLE
+    Get-EntityModel st person -GetDetail
+    Get-EntityModel st person FIRST.NAME, LAST.NAME > Person.cs
+  .NOTES
+    This is useful not just to generate the code for this module on-the-fly but to also generate the code and output it to a .cs file.
+  #>
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true, Position=1)]
