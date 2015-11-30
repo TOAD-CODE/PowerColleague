@@ -13,9 +13,9 @@
   ```
 2. Move the `PowerColleague` folder to your module folder
   *To find modules run:* 
-  ```powershell
-  $env:PSModulePath -split ";"
-  ```
+```powershell
+$env:PSModulePath -split ";"
+```
 
 ## Setup for first use
 1. Update the file `defaultVersion` with the correct Colleague .Net SDK version that is installed
