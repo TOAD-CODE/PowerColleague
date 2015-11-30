@@ -8,9 +8,9 @@
 
 ## Install
 1. Clone this project 
-  ```
-  git clone https://github.com/TOAD-CODE/PowerColleague
-  ```
+```
+git clone https://github.com/TOAD-CODE/PowerColleague
+```
 2. Move the `PowerColleague` folder to your module folder
   *To find modules run:* 
 ```powershell
