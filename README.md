@@ -56,19 +56,19 @@ Read-TableKeys  -Filter "LAST.NAME EQ 'Garrison' AND FIRST.NAME EQ 'Roger'"
 
 ### Execute Colleague Transactions
   *Note:* I'm working to clean this up a bit
-  1. Generate the transaction and compile it in memory
+  - Generate the transaction and compile it in memory
 ```powershell
 Set-DataContract (Get-CTXModel ST SFX007) StartStudentPaymentRequest
 ```
-  2. Create a new Transaction Request
+  - Create a new Transaction Request
 ```powershell
 $request = New-Object ColleagueSDK.DataContracts.StartStudentPaymentRequest
 ```
-  3. Set the Request Variables
+  - Set the Request Variables
 ```powershell
 $request.InPersonId = $PersonId
 ```
-  4. Invoke the Transaction
+  - Invoke the Transaction
 ```powershell
 $response = InvokeCTX $request.getType() (New-Object ColleagueSDK.DataContracts.StartStudentPaymentResponse).getType() $request
 ```
