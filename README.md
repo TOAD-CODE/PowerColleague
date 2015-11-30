@@ -47,7 +47,7 @@ Read-TableInfo Person -Filter "LAST.NAME EQ 'Garrison'" | Select FirstName, Last
   ...|...
 
 ```powershell
-Read-TableKeys  -Filter "LAST.NAME EQ 'Garrison' AND FIRST.NAME EQ 'Roger'" 
+Read-TableKeys Person -Filter "LAST.NAME EQ 'Garrison' AND FIRST.NAME EQ 'Roger'" 
 ```
 
 ### Execute Colleague Transactions
