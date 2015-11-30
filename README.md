@@ -89,9 +89,7 @@ Get-AppsForEntity Person
 ### All Other commands
 Command|Synopsis
 ----|--------
-```powershell
-Close-DmiSession
-```|Close the Dmi Session 
+Close-DmiSession|Close the Dmi Session 
 Get-AllApplications|Get all Colleague Applications
 Get-ApplicationCtxs|Get all the Transactions for a given Colleague Application
 Get-ApplicationEntities|Get all the Entities for a given Colleague Application
