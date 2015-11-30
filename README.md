@@ -39,7 +39,7 @@ Import the PowerShell Module
   Import-Module PowerColleague
   ```
 
-  ### Read Colleague Entities
+### Read Colleague Entities
   To read information from Colleague Entities call see the examples below:
   ```powershell
   Read-TableInfo Person -Filter "LAST.NAME EQ 'Garrison'" | Select FirstName, LastName
@@ -54,7 +54,7 @@ Import the PowerShell Module
   Read-TableKeys  -Filter "LAST.NAME EQ 'Garrison' AND FIRST.NAME EQ 'Roger'" 
   ```
 
-  ### Execute Colleague Transactions
+### Execute Colleague Transactions
   *Note:* I'm working to clean this up a bit
   1. Generate the transaction and compile it in memory
   ```powershell
@@ -73,17 +73,17 @@ Import the PowerShell Module
   $response = InvokeCTX $request.getType() (New-Object ColleagueSDK.DataContracts.StartStudentPaymentResponse).getType() $request
   ```
   
-  ### Find All Colleague Entities in all Applications
+### Find All Colleague Entities in all Applications
   ```powershell
   Get-AllApplications | Get-ApplicationEntities
   ```
 
-  ### Find All Colleague Transactions in all Applications
+### Find All Colleague Transactions in all Applications
   ```powershell
   Get-AllApplications | Get-ApplicationCtxs
   ```
   
-  ### Find which Application has an Entity
+### Find which Application has an Entity
   ```powershell
   Get-AppsForEntity Person
   ```
