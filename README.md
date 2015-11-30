@@ -16,10 +16,6 @@
   ```powershell
   $env:PSModulePath -split ";"
   ```
-<!--3. Import the PowerShell Module to use it-->
-  <!--```powerhsell-->
-  <!--Import-Module PowerColleague-->
-  <!--```-->
 
 ## Setup for first use
 1. Update the file `defaultVersion` with the correct Colleague .Net SDK version that is installed
