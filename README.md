@@ -66,7 +66,7 @@ $request.InPersonId = $PersonId
 ```
   - Invoke the Transaction
 ```powershell
-$response = InvokeCTX $request.getType() (New-Object ColleagueSDK.DataContracts.StartStudentPaymentResponse).getType() $request
+$response = Invoke-CTX $request.getType() (New-Object ColleagueSDK.DataContracts.StartStudentPaymentResponse).getType() $request
 ```
   
 ### Find All Colleague Entities in all Applications
