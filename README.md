@@ -35,7 +35,7 @@
 
 ## Usage
 Import the PowerShell Module
-```powerhsell
+```powershell
 Import-Module PowerColleague
 ```
 
