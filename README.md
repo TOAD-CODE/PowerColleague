@@ -3,7 +3,8 @@
 **PowerColleague** is a PowerShell module and wrapper around Colleague's *.Net SDK*
 
 ## Before Use
-- Verify that Visual Studio is installed *I haven't tested this without a VS installation*
+- Verify that Visual Studio is installed 
+  *I haven't tested this without a VS installation*
 - Verify which version of the the Colleague .Net SDK is installed 
 
 ## Install
@@ -83,7 +84,30 @@ Get-AllApplications | Get-ApplicationCtxs
 ```powershell
 Get-AppsForEntity Person
 ```
-`CORE`
+*Returns `CORE`
+
+### All Other commands
+Command|Synopsis
+----|--------
+Close-DmiSession|Close the Dmi Session 
+Get-AllApplications|Get all Colleague Applications
+Get-ApplicationCtxs|Get all the Transactions for a given Colleague Application
+Get-ApplicationEntities|Get all the Entities for a given Colleague Application
+Get-AppsForEntity|Get all Colleague Applications that contain a given Entity
+Get-ColleagueEnv|Get the current Colleague SDK environment Settings
+Get-ColleagueSession|Get Colleague Session  information
+Get-CtxModel|Build the generated generated c# code for a transaction
+Get-EntityModel|Build the generated c# code for a entity
+Get-SessionTimeout|Return the time when the session will timeout
+Initialize-ColleagueService|Initializes this module
+Invoke-CTX|Call the Colleage transaction
+Open-DmiSession| Open a new session to DMI
+Read-TableInfo|Read the information from the Colleague Entity
+Read-TableKeys|Read the keys from the Colleague Entity
+Set-AppConfig|Sets the Application configuration
+Set-AppSettings|Sets or adds information to the AppSettings Section of the App config
+Set-ColleagueCreds|Sets the Colleague Credentials in the Application Config
+Set-DataContract|Add a new Data Contract for reference in the current session
 
 
 
