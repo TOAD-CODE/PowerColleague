@@ -259,6 +259,7 @@ function Get-ColleagueEnv {
   return $colleagueEnv
 }
 
+#region ColleagueCTX
 function Set-DataContract {
   <#
   .SYNOPSIS
@@ -278,7 +279,7 @@ function Set-DataContract {
     Add-Type -ErrorAction SilentlyContinue -ReferencedAssemblies $script:TypeAssem -TypeDefinition $dataContractModel -Language CSharp 
   }
 }
-#region ColleagueCTX
+
 function Get-ApplicationCtxs {
   <#
   .SYNOPSIS
@@ -325,6 +326,18 @@ function Get-ApplicationCtxs {
   }
   
   END {}
+}
+
+function Get-CtxInfoFromAlias {
+  param ([string] $alias)
+  Get-AllApplications | Get-ApplicationCtxs | % {
+    $tran = $_.Transactions | ? {$alias -match $_.ProcessAliasName}
+    $obj = New-Object PSObject
+    $obj |` 
+       Add-Member -MemberType NoteProperty -Name Application -Value $_.Application -PassThru | `
+       Add-Member -MemberType NoteProperty -Name Transaction -Value $tran -PassThru
+  } | ? {$_.Transaction} `
+    | Select -first 1
 }
 
 function Get-CtxModel {
@@ -384,9 +397,65 @@ function Invoke-CTX {
       $entities = Invoke-CTX $typeRequest $typeResponse $request
   .NOTES
   #>
-  param($typeRequest, $typeResponse, $request)
+  param(
+    [parameter(Position=0,Mandatory=$true, ParameterSetName="Full")]
+    [ValidateNotNullOrEmpty()]
+     $typeRequest, 
+
+    [parameter(Position=1,Mandatory=$true, ParameterSetName="Full")]
+    [ValidateNotNullOrEmpty()]
+     $typeResponse, 
+
+    [parameter(Position=2,Mandatory=$true, ParameterSetName="Full")]
+    [ValidateNotNullOrEmpty()]
+    $request,
+
+    [parameter(Mandatory=$true, ParameterSetName="JustRequest", ValueFromPipeline=$true)]
+    [ValidateNotNullOrEmpty()]
+    $InputObject
+  )
+
   $trans = Get-TransactionInvoker
-  &"$PSScriptRoot\Invoke-GenericMethod.ps1" $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
+  switch ($psCmdlet.ParameterSetName) {
+    "Full" {
+      if($request.getType() -eq $typeRequest){
+        &"$PSScriptRoot\Invoke-GenericMethod.ps1" $trans -methodName Execute -typeParameters $typeRequest, $typeResponse -methodParameters $request
+      }
+      else {
+        throw "$typeRequest should be the type of $request"
+      }
+    }
+    "JustRequest" {
+      $responseType = (New-Object $($InputObject.getType().FullName -replace "quest$", "sponse")).getType()
+      $requestType = $InputObject.getType()
+      &"$PSScriptRoot\Invoke-GenericMethod.ps1" $trans -methodName Execute -typeParameters $requestType, $responseType -methodParameters $InputObject
+    }
+  }
+}
+
+function New-CtxObject {
+  <#
+  .SYNOPSIS
+    Create a new Transaction Object
+  .DESCRIPTION
+    This creates a new Transaction Object. It's meant for the short hand of "$request = New-Object ColleagueSDK.DataContracts.StartStudentPaymentRequest"
+  .PARAMETER obj
+    the object name to return
+  .EXAMPLE
+      $request = New-CtxObject GetApplEntitiesRequest
+  .NOTES
+  #>
+  param([string] $obj)
+  if(([System.Management.Automation.PSTypeName]"ColleagueSDK.DataContracts.$obj").Type){
+    return New-Object "ColleagueSDK.DataContracts.$obj"
+  }
+  elseif(($ctxInfo = Get-CtxInfoFromAlias $obj)){
+    Set-DataContract (Get-CtxModel $ctxInfo.Application $ctxInfo.Transaction.ProcessName) $obj
+    return New-Object "ColleagueSDK.DataContracts.$obj"
+  }
+  else {
+    return $null
+  }
 }
 
 function Get-TransactionInvoker {
