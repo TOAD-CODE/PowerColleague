@@ -1,3 +1,5 @@
+#Requires -Version 4.0
+
 #region ModuleSettings
 function Set-AppConfig{
   <#
